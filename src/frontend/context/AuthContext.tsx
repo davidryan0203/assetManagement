@@ -9,7 +9,6 @@ import {
   ReactNode,
 } from "react";
 import axios from "axios";
-import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 
 interface User {
@@ -47,13 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       setUser(null);
       setToken(null);
-      Cookies.remove("token");
       localStorage.removeItem("token");
     }
   }, []);
 
   useEffect(() => {
-    const storedToken = Cookies.get("token") || localStorage.getItem("token");
+    // httpOnly cookies can't be read by JS — use localStorage as the client-side token store.
+    const storedToken = localStorage.getItem("token");
     if (storedToken) {
       setToken(storedToken);
       fetchMe(storedToken).finally(() => setLoading(false));
@@ -68,9 +67,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const res = await axios.post("/api/auth/login", { email, password });
     const { token: tkn, user: u } = res.data;
+    // The server sets the httpOnly cookie via Set-Cookie header.
+    // We store the token in state and localStorage for client-side API calls,
+    // but do NOT write a duplicate js-cookie — that conflicts with the httpOnly one.
     setToken(tkn);
     setUser(u);
-    Cookies.set("token", tkn, { expires: 7 });
     localStorage.setItem("token", tkn);
   };
 
@@ -82,7 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setToken(null);
-    Cookies.remove("token");
     localStorage.removeItem("token");
     router.push("/login");
   };

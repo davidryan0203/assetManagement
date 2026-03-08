@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     name: `${user.firstName} ${user.lastName}`.trim(),
   });
 
-  const response = NextResponse.json({
+  return NextResponse.json({
     message: "Login successful",
     token,
     user: {
@@ -42,14 +42,4 @@ export async function POST(req: NextRequest) {
       site: user.site,
     },
   });
-
-  response.cookies.set("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-    path: "/",
-  });
-
-  return response;
 }

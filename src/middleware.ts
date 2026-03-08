@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken } from "@backend/lib/jwt";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/seed"];
 
@@ -11,27 +10,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow all other API routes to handle their own auth
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.next();
-  }
-
-  // Check auth for dashboard routes
-  if (pathname.startsWith("/dashboard") || pathname === "/") {
-    const token = req.cookies.get("token")?.value;
-    if (!token) {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
-    try {
-      verifyToken(token);
-      return NextResponse.next();
-    } catch {
-      const response = NextResponse.redirect(new URL("/login", req.url));
-      response.cookies.delete("token");
-      return response;
-    }
-  }
-
+  // Allow all routes — page-level auth is handled by DashboardLayout (client-side)
+  // and API routes handle their own auth via getUserFromRequest.
   return NextResponse.next();
 }
 
