@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@backend/lib/dbConnect";
 import Report from "@backend/models/Report";
 import Asset from "@backend/models/Asset";
-import "@backend/models/Product";
+import Product from "@backend/models/Product";
+import User from "@backend/models/User";
+import Department from "@backend/models/Department";
+import Site from "@backend/models/Site";
 import "@backend/models/Category";
 import "@backend/models/Vendor";
-import "@backend/models/Department";
-import "@backend/models/Site";
-import "@backend/models/User";
 import { getUserFromRequest } from "@backend/lib/jwt";
 
 // GET /api/reports/[id]/run — execute the report and return data rows
@@ -64,6 +64,65 @@ export async function GET(
     const postFiltered = applyPostFilters(filtered, report.filters);
 
     rows = postFiltered.map((a) => flattenAsset(a));
+  } else if (report.module === "Sites") {
+    const sites = await Site.find(query).lean();
+    const postFiltered = applyPostFilters(sites, report.filters);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rows = postFiltered.map((s: any) => ({
+      _id: s._id?.toString(),
+      name: s.name ?? "",
+      description: s.description ?? "",
+      country: s.country ?? "",
+      createdAt: s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "",
+    }));
+  } else if (report.module === "Departments") {
+    const departments = await Department.find(query).lean();
+    const postFiltered = applyPostFilters(departments, report.filters);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rows = postFiltered.map((d: any) => ({
+      _id: d._id?.toString(),
+      name: d.name ?? "",
+      code: d.code ?? "",
+      description: d.description ?? "",
+      isActive: d.isActive ? "Yes" : "No",
+      createdAt: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : "",
+    }));
+  } else if (report.module === "Users") {
+    const usersQuery = { ...query };
+    if (report.subModule && report.subModule !== "All") {
+      usersQuery["role"] = report.subModule;
+    }
+    const users = await User.find(usersQuery)
+      .populate("department", "name")
+      .populate("site", "name")
+      .lean();
+    const postFiltered = applyPostFilters(users, report.filters);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rows = postFiltered.map((u: any) => ({
+      _id: u._id?.toString(),
+      name: u.name ?? "",
+      email: u.email ?? "",
+      role: u.role ?? "",
+      "department.name": u.department?.name ?? "",
+      "site.name": u.site?.name ?? "",
+      createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "",
+    }));
+  } else if (report.module === "Products") {
+    const products = await Product.find(query)
+      .populate("category", "name")
+      .populate("vendor", "name")
+      .lean();
+    const postFiltered = applyPostFilters(products, report.filters);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rows = postFiltered.map((p: any) => ({
+      _id: p._id?.toString(),
+      name: p.name ?? "",
+      sku: p.sku ?? "",
+      description: p.description ?? "",
+      "category.name": p.category?.name ?? "",
+      "vendor.name": p.vendor?.name ?? "",
+      createdAt: p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "",
+    }));
   }
 
   return NextResponse.json({

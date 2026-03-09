@@ -35,6 +35,7 @@ const navItems: NavItem[] = [
   { label: "Categories", href: "/dashboard/categories", icon: <FiTag />, roles: ["admin"], section: "catalog" },
   { label: "Vendors", href: "/dashboard/vendors", icon: <FiTruck />, roles: ["admin"], section: "catalog" },
   { label: "Products", href: "/dashboard/products", icon: <FiCpu />, roles: ["admin"], section: "catalog" },
+  { label: "Product Types", href: "/dashboard/product-types", icon: <FiGrid />, roles: ["admin"], section: "catalog" },
 ];
 
 export default function Sidebar() {

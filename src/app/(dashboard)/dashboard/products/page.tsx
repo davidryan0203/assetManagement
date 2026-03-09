@@ -11,25 +11,22 @@ import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiCpu } from "react-icons/fi";
 import { useRouter } from "next/navigation";
 
 interface Category { _id: string; name: string; }
-interface Vendor { _id: string; name: string; }
+interface ProductTypeOption { _id: string; name: string; type: string; }
 interface Product {
   _id: string;
   name: string;
-  sku?: string;
-  category: Category;
-  vendor?: Vendor | null;
-  description?: string;
-  modelNumber?: string;
+  productType?: ProductTypeOption | null;
   manufacturer?: string;
-  defaultWarrantyMonths?: number;
+  partNo?: string;
+  cost?: number;
+  category: Category;
   isActive: boolean;
   createdAt: string;
 }
 
 const emptyForm = {
-  name: "", sku: "", category: "", vendor: "",
-  description: "", modelNumber: "", manufacturer: "",
-  defaultWarrantyMonths: "", isActive: true,
+  name: "", productType: "", manufacturer: "", partNo: "", cost: "",
+  category: "", isActive: true,
 };
 
 export default function ProductsPage() {
@@ -38,7 +35,7 @@ export default function ProductsPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [productTypes, setProductTypes] = useState<ProductTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
@@ -67,14 +64,15 @@ export default function ProductsPage() {
 
   useEffect(() => {
     api.get("/categories").then((r) => setCategories(r.data.categories));
-    api.get("/vendors").then((r) => setVendors(r.data.vendors));
+    api.get("/product-types").then((r) => setProductTypes(r.data.productTypes));
   }, []);
 
   const filtered = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.sku || "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.modelNumber || "").toLowerCase().includes(search.toLowerCase())
+      (p.manufacturer || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.partNo || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.productType?.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const openCreate = () => {
@@ -87,13 +85,11 @@ export default function ProductsPage() {
     setEditProduct(p);
     setForm({
       name: p.name,
-      sku: p.sku || "",
-      category: p.category?._id || "",
-      vendor: p.vendor?._id || "",
-      description: p.description || "",
-      modelNumber: p.modelNumber || "",
+      productType: p.productType?._id || "",
       manufacturer: p.manufacturer || "",
-      defaultWarrantyMonths: p.defaultWarrantyMonths?.toString() || "",
+      partNo: p.partNo || "",
+      cost: p.cost?.toString() || "",
+      category: p.category?._id || "",
       isActive: p.isActive,
     });
     setShowModal(true);
@@ -108,8 +104,8 @@ export default function ProductsPage() {
     try {
       const payload = {
         ...form,
-        vendor: form.vendor || null,
-        defaultWarrantyMonths: form.defaultWarrantyMonths ? Number(form.defaultWarrantyMonths) : null,
+        productType: form.productType || null,
+        cost: form.cost ? Number(form.cost) : null,
       };
       if (editProduct) {
         await api.put(`/products/${editProduct._id}`, payload);
@@ -160,7 +156,7 @@ export default function ProductsPage() {
           <input
             type="text"
             className="input-field pl-10"
-            placeholder="Search by name, SKU, model..."
+            placeholder="Search by name, manufacturer, part no., type..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -192,12 +188,12 @@ export default function ProductsPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Name</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">SKU</th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Product Name</th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Product Type</th>
                   <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Category</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Vendor</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Model #</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Warranty</th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Manufacturer</th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Part No.</th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Cost</th>
                   <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Status</th>
                   {isAdmin && <th className="text-right py-3.5 px-4 text-gray-500 font-medium">Actions</th>}
                 </tr>
@@ -206,12 +202,12 @@ export default function ProductsPage() {
                 {filtered.map((p) => (
                   <tr key={p._id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-3.5 px-4 font-medium text-gray-900">{p.name}</td>
-                    <td className="py-3.5 px-4 text-gray-500 font-mono text-xs">{p.sku || "—"}</td>
+                    <td className="py-3.5 px-4 text-gray-600">{p.productType?.name || "—"}</td>
                     <td className="py-3.5 px-4 text-gray-600">{p.category?.name}</td>
-                    <td className="py-3.5 px-4 text-gray-600">{p.vendor?.name || "—"}</td>
-                    <td className="py-3.5 px-4 text-gray-600">{p.modelNumber || "—"}</td>
+                    <td className="py-3.5 px-4 text-gray-600">{p.manufacturer || "—"}</td>
+                    <td className="py-3.5 px-4 text-gray-500 font-mono text-xs">{p.partNo || "—"}</td>
                     <td className="py-3.5 px-4 text-gray-600">
-                      {p.defaultWarrantyMonths ? `${p.defaultWarrantyMonths} mo` : "—"}
+                      {p.cost != null ? `C$${p.cost.toFixed(2)}` : "—"}
                     </td>
                     <td className="py-3.5 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${p.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
@@ -242,20 +238,22 @@ export default function ProductsPage() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         title={editProduct ? "Edit Product" : "Add Product"}
-        size="lg"
+        size="md"
       >
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
+            <SearchableSelect
+              options={productTypes.map((pt) => ({ value: pt._id, label: `${pt.name} (${pt.type})` }))}
+              value={form.productType}
+              onChange={(v) => setForm((p) => ({ ...p, productType: v }))}
+              placeholder="Select product type"
+              noneLabel="— No Product Type —"
+            />
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
             <input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. MacBook Pro M3" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-            <input className="input-field" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="e.g. MBP-M3-14" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Model Number</label>
-            <input className="input-field" value={form.modelNumber} onChange={(e) => setForm({ ...form, modelNumber: e.target.value })} placeholder="e.g. A2992" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
@@ -268,26 +266,16 @@ export default function ProductsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label>
-            <SearchableSelect
-              options={vendors.map((v) => ({ value: v._id, label: v.name }))}
-              value={form.vendor}
-              onChange={(v) => setForm((p) => ({ ...p, vendor: v }))}
-              placeholder="Select vendor"
-              noneLabel="— No Vendor —"
-            />
-          </div>
-          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Manufacturer</label>
-            <input className="input-field" value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} placeholder="e.g. Apple" />
+            <input className="input-field" value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} placeholder="e.g. Apple, Dell, HP" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Default Warranty (months)</label>
-            <input type="number" min="0" className="input-field" value={form.defaultWarrantyMonths} onChange={(e) => setForm({ ...form, defaultWarrantyMonths: e.target.value })} placeholder="e.g. 12" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Part No.</label>
+            <input className="input-field" value={form.partNo} onChange={(e) => setForm({ ...form, partNo: e.target.value })} placeholder="e.g. MK183LL/A" />
           </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description..." />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cost (C$)</label>
+            <input type="number" min="0" step="0.01" className="input-field" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} placeholder="0.00" />
           </div>
           {editProduct && (
             <div>

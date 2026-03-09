@@ -15,7 +15,7 @@ export interface IAsset extends Document {
   barcodeQr?: string;
   location?: string;
   // Asset State
-  assetState: "In Store" | "In Use" | "Under Repair" | "Retired" | "Disposed" | "Lost" | "Missing";
+  assetState: "In Store" | "Assigned" | "Under Repair" | "Retired" | "Disposed" | "Lost" | "Missing";
   assignedTo?: mongoose.Types.ObjectId | null;
   department?: mongoose.Types.ObjectId | null;
   site?: mongoose.Types.ObjectId | null;
@@ -56,7 +56,7 @@ const AssetSchema = new Schema<IAsset>(
     // Asset State
     assetState: {
       type: String,
-      enum: ["In Store", "In Use", "Under Repair", "Retired", "Disposed", "Lost", "Missing"],
+      enum: ["In Store", "Assigned", "Under Repair", "Retired", "Disposed", "Lost", "Missing"],
       default: "In Store",
     },
     assignedTo: { type: Schema.Types.ObjectId, ref: "User", default: null },

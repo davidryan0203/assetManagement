@@ -8,15 +8,12 @@ import Modal from "@frontend/components/ui/Modal";
 import ConfirmDialog from "@frontend/components/ui/ConfirmDialog";
 import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiMapPin } from "react-icons/fi";
 import { useRouter } from "next/navigation";
-import SearchableSelect from "@frontend/components/ui/SearchableSelect";
 
 interface Site {
   _id: string;
   name: string;
   description?: string;
   region?: string;
-  timeZone?: string;
-  language?: string;
   doorNumber?: string;
   street?: string;
   landmark?: string;
@@ -33,37 +30,12 @@ interface Site {
 }
 
 const emptyForm: Omit<Site, "_id" | "createdAt"> = {
-  name: "", description: "", region: "", timeZone: "", language: "",
+  name: "", description: "", region: "",
   doorNumber: "", street: "", landmark: "", city: "", stateProvince: "",
-  zipPostalCode: "", country: "USA",
+  zipPostalCode: "", country: "Canada",
   email: "", phoneNo: "", faxNo: "", webUrl: "",
   isActive: true,
 };
-
-const TIME_ZONES = [
-  "(GMT-12:00) International Date Line West",
-  "(GMT-11:00) Midway Island, Samoa",
-  "(GMT-10:00) Hawaii",
-  "(GMT-09:00) Alaska",
-  "(GMT-08:00) Pacific Time (US & Canada)",
-  "(GMT-07:00) Mountain Time (US & Canada)",
-  "(GMT-06:00) Central Time (US & Canada)",
-  "(GMT-05:00) Eastern Time (US & Canada)",
-  "(GMT-04:00) Atlantic Time (Canada)",
-  "(GMT-03:30) Newfoundland",
-  "(GMT-03:00) Brasilia",
-  "(GMT+00:00) Greenwich Mean Time",
-  "(GMT+01:00) Central European Time",
-  "(GMT+05:30) India Standard Time",
-  "(GMT+08:00) China Standard Time",
-  "(GMT+09:00) Japan Standard Time",
-  "(GMT+10:00) Australian Eastern Time",
-];
-
-const LANGUAGES = [
-  "English", "French", "Spanish", "Portuguese", "German",
-  "Chinese", "Japanese", "Arabic", "Hindi",
-];
 
 const SECTION = ({ title }: { title: string }) => (
   <div className="col-span-2 border-b border-gray-100 pb-1 mt-2">
@@ -120,15 +92,13 @@ export default function SitesPage() {
       name: site.name,
       description: site.description || "",
       region: site.region || "",
-      timeZone: site.timeZone || "",
-      language: site.language || "",
       doorNumber: site.doorNumber || "",
       street: site.street || "",
       landmark: site.landmark || "",
       city: site.city || "",
       stateProvince: site.stateProvince || "",
       zipPostalCode: site.zipPostalCode || "",
-      country: site.country || "USA",
+      country: site.country || "Canada",
       email: site.email || "",
       phoneNo: site.phoneNo || "",
       faxNo: site.faxNo || "",
@@ -282,26 +252,6 @@ export default function SitesPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea className="input-field" rows={2} value={form.description} onChange={f("description")} placeholder="Site description" />
           </div>
-          <div className="col-span-2 sm:col-span-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Time Zone</label>
-            <SearchableSelect
-              options={TIME_ZONES.map((tz) => ({ value: tz, label: tz }))}
-              value={form.timeZone}
-              onChange={(v) => setForm((p) => ({ ...p, timeZone: v }))}
-              placeholder="Select time zone"
-              noneLabel="— Select Time Zone —"
-            />
-          </div>
-          <div className="col-span-2 sm:col-span-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
-            <SearchableSelect
-              options={LANGUAGES.map((l) => ({ value: l, label: l }))}
-              value={form.language}
-              onChange={(v) => setForm((p) => ({ ...p, language: v }))}
-              placeholder="Select language"
-              noneLabel="— Select Language —"
-            />
-          </div>
 
           {/* Address */}
           <SECTION title="Address" />
@@ -331,7 +281,7 @@ export default function SitesPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-            <input className="input-field" value={form.country} onChange={f("country")} placeholder="USA" />
+            <input className="input-field bg-gray-50 text-gray-500 cursor-not-allowed" value="Canada" readOnly />
           </div>
 
           {/* Contact Information */}

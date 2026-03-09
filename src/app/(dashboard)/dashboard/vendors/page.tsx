@@ -24,6 +24,16 @@ interface Vendor {
 
 const emptyForm = { name: "", contactName: "", email: "", phone: "", website: "", address: "", notes: "", isActive: true };
 
+// Format input as Canadian phone: 1-XXX-XXX-XXXX
+function formatCanadianPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 1) return digits;
+  if (digits.length <= 4) return `1-${digits.slice(1)}`;
+  if (digits.length <= 7) return `1-${digits.slice(1, 4)}-${digits.slice(4)}`;
+  if (digits.length <= 11) return `1-${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+  return raw;
+}
+
 export default function VendorsPage() {
   const { isAdmin } = useAuth();
   const router = useRouter();
@@ -222,7 +232,12 @@ export default function VendorsPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-            <input className="input-field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+1 555 000 0000" />
+            <input
+              className="input-field"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: formatCanadianPhone(e.target.value) })}
+              placeholder="1-709-888-8888"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>

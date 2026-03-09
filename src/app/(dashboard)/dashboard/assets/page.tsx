@@ -62,11 +62,11 @@ const SECTION = ({ title }: { title: string }) => (
   </div>
 );
 
-const ASSET_STATES = ["In Store", "In Use", "Under Repair", "Retired", "Disposed", "Lost", "Missing"];
+const ASSET_STATES = ["In Store", "Assigned", "Under Repair", "Retired", "Disposed", "Lost", "Missing"];
 
 const stateClass: Record<string, string> = {
   "In Store": "bg-blue-100 text-blue-700",
-  "In Use": "bg-green-100 text-green-700",
+  "Assigned": "bg-green-100 text-green-700",
   "Under Repair": "bg-yellow-100 text-yellow-700",
   "Retired": "bg-gray-100 text-gray-600",
   "Disposed": "bg-red-100 text-red-600",
@@ -86,6 +86,7 @@ const emptyForm = {
   purchaseCost: "", acquisitionDate: "", expiryDate: "", warrantyExpiryDate: "",
   barcodeQr: "", location: "",
   assetState: "In Store", department: "", site: "", associatedTo: "",
+  assignedUser: "",
   retainSite: false, stateComments: "",
   isNewDevice: true, assetCheck: "", comment: "", comment2: "",
   conditionTag: "", grade: "", cell: "", devicePurchase: "",
@@ -188,7 +189,7 @@ export default function AssetsPage() {
       api.get("/departments"),
       api.get("/sites"),
       api.get("/assets"),
-      isManager ? api.get("/users") : Promise.resolve({ data: { users: [] } }),
+      api.get("/users").catch(() => ({ data: { users: [] } })),
     ]).then(([catRes, venRes, prodRes, deptRes, siteRes, assetRes, userRes]) => {
       setCategories(catRes.data.categories);
       setVendors(venRes.data.vendors);
@@ -198,7 +199,7 @@ export default function AssetsPage() {
       setAllAssets(assetRes.data.assets);
       setUsers(userRes.data.users);
     });
-  }, [isManager]);
+  }, []);
 
   const sf = <K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -300,6 +301,7 @@ export default function AssetsPage() {
       department: asset.department?._id || "",
       site: asset.site?._id || "",
       associatedTo: (asset.associatedTo as Asset | null)?._id || "",
+      assignedUser: asset.assignedTo?._id || "",
       retainSite: asset.retainSite,
       stateComments: asset.stateComments || "",
       isNewDevice: asset.isNewDevice,
@@ -331,6 +333,7 @@ export default function AssetsPage() {
         department: form.department || null,
         site: form.site || null,
         associatedTo: form.associatedTo || null,
+        assignedTo: form.assetState === "Assigned" ? (form.assignedUser || null) : null,
         acquisitionDate: form.acquisitionDate || null,
         expiryDate: form.expiryDate || null,
         warrantyExpiryDate: form.warrantyExpiryDate || null,
@@ -492,7 +495,7 @@ export default function AssetsPage() {
           <AssetFormBody
             form={form} sf={sf} products={products} vendors={vendors}
             departments={departments} sites={sites} allAssets={allAssets}
-            editAsset={editAsset} selectedProductObj={selectedProductObj}
+            editAsset={editAsset} selectedProductObj={selectedProductObj} users={users}
           />
           <div className="flex gap-3 mt-6">
             <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -722,7 +725,7 @@ export default function AssetsPage() {
         <AssetFormBody
           form={form} sf={sf} products={products} vendors={vendors}
           departments={departments} sites={sites} allAssets={allAssets}
-          editAsset={editAsset} selectedProductObj={selectedProductObj}
+          editAsset={editAsset} selectedProductObj={selectedProductObj} users={users}
         />
         <div className="flex gap-3 mt-6">
           <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -743,7 +746,7 @@ export default function AssetsPage() {
 // ─── Extracted form body (shared between create and edit modals) ──────────────
 
 function AssetFormBody({
-  form, sf, products, vendors, departments, sites, allAssets, editAsset, selectedProductObj,
+  form, sf, products, vendors, departments, sites, allAssets, editAsset, selectedProductObj, users,
 }: {
   form: typeof emptyForm;
   sf: <K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) => void;
@@ -754,6 +757,7 @@ function AssetFormBody({
   allAssets: Asset[];
   editAsset: Asset | null;
   selectedProductObj: Product | undefined;
+  users: UserOption[];
 }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -830,17 +834,47 @@ function AssetFormBody({
           value={form.associatedTo} onChange={(v) => sf("associatedTo", v)}
           placeholder="Select asset to associate" noneLabel="— None —" />
       </div>
+
+      {/* Conditional assignment fields — only show when state is Assigned */}
+      {form.assetState === "Assigned" && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Assign to User <span className="text-gray-400 font-normal text-xs">(or assign to Site below)</span>
+            </label>
+            <SearchableSelect
+              options={users.map((u) => ({ value: u._id, label: `${u.name} (${u.email})` }))}
+              value={form.assignedUser || ""}
+              onChange={(v) => sf("assignedUser" as keyof typeof emptyForm, v)}
+              placeholder="Select user"
+              noneLabel="— No User —"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Assign to Site <span className="text-gray-400 font-normal text-xs">(or assign to user above)</span>
+            </label>
+            <SearchableSelect options={sites.map((s) => ({ value: s._id, label: s.name }))}
+              value={form.site} onChange={(v) => sf("site", v)}
+              placeholder="Select site" noneLabel="— No Site —" />
+          </div>
+        </>
+      )}
+
+      {form.assetState !== "Assigned" && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
+          <SearchableSelect options={sites.map((s) => ({ value: s._id, label: s.name }))}
+            value={form.site} onChange={(v) => sf("site", v)}
+            placeholder="Select site" noneLabel="— Select Site —" />
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
         <SearchableSelect options={departments.map((d) => ({ value: d._id, label: d.name }))}
           value={form.department} onChange={(v) => sf("department", v)}
           placeholder="Select department" noneLabel="— Select Department —" />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
-        <SearchableSelect options={sites.map((s) => ({ value: s._id, label: s.name }))}
-          value={form.site} onChange={(v) => sf("site", v)}
-          placeholder="Select site" noneLabel="— Select Site —" />
       </div>
       <div className="col-span-2 flex items-center gap-2 mt-1">
         <input type="checkbox" id="retainSiteEdit" checked={form.retainSite}

@@ -3,6 +3,7 @@ import dbConnect from "@backend/lib/dbConnect";
 import Product from "@backend/models/Product";
 import "@backend/models/Category";
 import "@backend/models/Vendor";
+import "@backend/models/ProductType";
 import { getUserFromRequest } from "@backend/lib/jwt";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,11 +17,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const product = await Product.findByIdAndUpdate(
     id,
-    { ...body, vendor: body.vendor || null, defaultWarrantyMonths: body.defaultWarrantyMonths || null },
+    { ...body, vendor: body.vendor || null, productType: body.productType || null, cost: body.cost || null, defaultWarrantyMonths: body.defaultWarrantyMonths || null },
     { new: true, runValidators: true }
   )
     .populate("category", "name")
-    .populate("vendor", "name");
+    .populate("vendor", "name")
+    .populate("productType", "name type");
 
   if (!product) return NextResponse.json({ message: "Product not found" }, { status: 404 });
 
