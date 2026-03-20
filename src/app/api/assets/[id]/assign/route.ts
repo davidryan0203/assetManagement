@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@backend/lib/dbConnect";
-import Asset from "@backend/models/Asset";
-import User from "@backend/models/User";
-import "@backend/models/Product";
-import "@backend/models/Category";
-import "@backend/models/Vendor";
-import "@backend/models/Department";
-import "@backend/models/Site";
+import { Prisma } from "@prisma/client";
 import { getUserFromRequest } from "@backend/lib/jwt";
+import prisma from "@backend/lib/prisma";
+import { serializeAsset, toPrismaAssetState } from "@backend/lib/mysqlSerializers";
 
 // POST /api/assets/[id]/assign
 // Assigns (or un-assigns) an asset to a user and/or department.
@@ -16,7 +11,6 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser || currentUser.role === "staff") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -27,7 +21,7 @@ export async function POST(
   const { assignedTo, department, associatedTo, site, retainSite, stateComments } = body;
 
   // If neither user nor department is provided, we are un-assigning
-  const newState = assignedTo ? "In Use" : "In Store";
+  const newState = assignedTo ? "Assigned" : "In Store";
 
   // If retainSite is true, keep the site that was auto-resolved from the user;
   // otherwise use whatever site was explicitly provided.
@@ -35,33 +29,42 @@ export async function POST(
 
   if (assignedTo && retainSite) {
     // Auto-resolve site from the assigned user's site
-    const userDoc = await User.findById(assignedTo).select("site").lean();
-    if (userDoc?.site) {
-      resolvedSite = userDoc.site.toString();
+    const userDoc = await prisma.user.findUnique({ where: { id: assignedTo }, select: { siteId: true } });
+    if (userDoc?.siteId) {
+      resolvedSite = userDoc.siteId;
     }
   }
 
-  const asset = await Asset.findByIdAndUpdate(
-    id,
-    {
-      assignedTo: assignedTo || null,
-      department: department || null,
-      associatedTo: associatedTo || null,
-      site: resolvedSite,
-      retainSite: !!retainSite,
-      stateComments: stateComments || "",
-      assetState: newState,
+  const data: Prisma.AssetUpdateInput = {
+    assignedTo: assignedTo ? { connect: { id: assignedTo } } : { disconnect: true },
+    department: department ? { connect: { id: department } } : { disconnect: true },
+    associatedTo: associatedTo ? { connect: { id: associatedTo } } : { disconnect: true },
+    site: resolvedSite ? { connect: { id: resolvedSite } } : { disconnect: true },
+    retainSite: !!retainSite,
+    stateComments: stateComments || "",
+    assetState: toPrismaAssetState(newState) as any,
+  };
+
+  const asset = await prisma.asset.update({
+    where: { id },
+    data,
+    include: {
+      product: { include: { category: true, vendor: true, productType: { include: { category: true } } } },
+      vendor: true,
+      department: true,
+      site: true,
+      assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
+      associatedTo: { select: { id: true, name: true, assetTag: true } },
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
     },
-    { new: true, runValidators: true }
-  )
-    .populate({ path: "product", select: "name sku category vendor", populate: [{ path: "category", select: "name" }, { path: "vendor", select: "name" }] })
-    .populate("vendor", "name")
-    .populate("department", "name code")
-    .populate("site", "name")
-    .populate("assignedTo", "name email firstName lastName site")
-    .populate("associatedTo", "name assetTag");
+  }).catch((error: unknown) => {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      return null;
+    }
+    throw error;
+  });
 
   if (!asset) return NextResponse.json({ message: "Asset not found" }, { status: 404 });
 
-  return NextResponse.json({ message: "Asset assigned", asset });
+  return NextResponse.json({ message: "Asset assigned", asset: serializeAsset(asset) });
 }

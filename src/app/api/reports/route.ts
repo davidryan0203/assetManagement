@@ -1,25 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@backend/lib/dbConnect";
-import Report from "@backend/models/Report";
 import { getUserFromRequest } from "@backend/lib/jwt";
+import prisma from "@backend/lib/prisma";
+import { serializeReport } from "@backend/lib/mysqlSerializers";
 
 // GET all reports
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-  const reports = await Report.find()
-    .populate("createdBy", "name")
-    .populate("folder", "name")
-    .sort({ createdAt: -1 });
+  const reports = await prisma.report.findMany({
+    include: {
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
+      folder: { include: { createdBy: { select: { id: true, firstName: true, lastName: true } } } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  return NextResponse.json({ reports });
+  return NextResponse.json({ reports: reports.map(serializeReport) });
 }
 
 // POST create report
 export async function POST(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser || currentUser.role === "staff") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -35,16 +36,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const report = await Report.create({
-    title: title.trim(),
-    reportType: reportType || "Tabular",
-    module: mod,
-    subModule,
-    selectedColumns: body.selectedColumns || [],
-    filters: body.filters || [],
-    folder: body.folder || null,
-    createdBy: currentUser.id,
+  const report = await prisma.report.create({
+    data: {
+      title: title.trim(),
+      reportType: reportType || "Tabular",
+      module: mod,
+      subModule,
+      selectedColumns: body.selectedColumns || [],
+      filters: body.filters || [],
+      ...(body.folder ? { folder: { connect: { id: body.folder } } } : {}),
+      createdBy: { connect: { id: currentUser.id } },
+    },
+    include: {
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
+      folder: { include: { createdBy: { select: { id: true, firstName: true, lastName: true } } } },
+    },
   });
 
-  return NextResponse.json({ report }, { status: 201 });
+  return NextResponse.json({ report: serializeReport(report) }, { status: 201 });
 }

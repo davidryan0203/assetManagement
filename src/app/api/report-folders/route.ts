@@ -1,24 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@backend/lib/dbConnect";
-import ReportFolder from "@backend/models/ReportFolder";
 import { getUserFromRequest } from "@backend/lib/jwt";
+import prisma from "@backend/lib/prisma";
+import { serializeReportFolder } from "@backend/lib/mysqlSerializers";
 
 // GET all folders
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-  const folders = await ReportFolder.find()
-    .populate("createdBy", "name")
-    .sort({ createdAt: -1 });
+  const folders = await prisma.reportFolder.findMany({
+    include: { createdBy: { select: { id: true, firstName: true, lastName: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 
-  return NextResponse.json({ folders });
+  return NextResponse.json({ folders: folders.map(serializeReportFolder) });
 }
 
 // POST create folder
 export async function POST(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser || currentUser.role === "staff") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -29,6 +28,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Folder name is required" }, { status: 400 });
   }
 
-  const folder = await ReportFolder.create({ name: name.trim(), createdBy: currentUser.id });
-  return NextResponse.json({ folder }, { status: 201 });
+  const folder = await prisma.reportFolder.create({
+    data: { name: name.trim(), createdBy: { connect: { id: currentUser.id } } },
+    include: { createdBy: { select: { id: true, firstName: true, lastName: true } } },
+  });
+  return NextResponse.json({ folder: serializeReportFolder(folder) }, { status: 201 });
 }

@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  manager
+  staff
+}
+
+enum ProductKind {
+  Asset
+  Consumable
+}
+
+enum AssetState {
+  InStore     @map("In Store")
+  Assigned
+  UnderRepair @map("Under Repair")
+  Retired
+  Disposed
+  Lost
+  Missing
+}
+
+enum ReportType {
+  Tabular
+  Matrix
+  Summary
+  Scan
+}
+
+model User {
+  id          String     @id @default(cuid()) @db.VarChar(191)
+  firstName   String
+  lastName    String
+  displayName String?
+  employeeId  String?
+  description String?
+  email       String     @unique
+  password    String
+  role        Role       @default(staff)
+  phone       String?
+  mobile      String?
+  departmentId String?   @db.VarChar(191)
+  siteId      String?    @db.VarChar(191)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  department  Department? @relation(fields: [departmentId], references: [id])
+  site        Site?       @relation(fields: [siteId], references: [id])
+  createdAssets Asset[]   @relation("AssetCreatedBy")
+  assignedAssets Asset[]  @relation("AssetAssignedTo")
+  reports     Report[]
+  reportFolders ReportFolder[]
+
+  @@index([departmentId])
+  @@index([siteId])
+  @@map("users")
+}
+
+model Department {
+  id          String   @id @default(cuid()) @db.VarChar(191)
+  name        String   @unique
+  description String?
+  code        String   @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  assets      Asset[]
+
+  @@map("departments")
+}
+
+model Site {
+  id            String   @id @default(cuid()) @db.VarChar(191)
+  name          String   @unique
+  description   String?
+  region        String?
+  timeZone      String?
+  language      String?
+  doorNumber    String?
+  street        String?
+  landmark      String?
+  city          String?
+  stateProvince String?
+  zipPostalCode String?
+  country       String?  @default("USA")
+  email         String?
+  phoneNo       String?
+  faxNo         String?
+  webUrl        String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users         User[]
+  assets        Asset[]
+
+  @@map("sites")
+}
+
+model Category {
+  id          String   @id @default(cuid()) @db.VarChar(191)
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  productTypes ProductType[]
+  products     Product[]
+
+  @@map("categories")
+}
+
+model ProductType {
+  id         String      @id @default(cuid()) @db.VarChar(191)
+  name       String      @unique
+  categoryId String      @db.VarChar(191)
+  type       ProductKind @default(Asset)
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  products   Product[]
+
+  @@index([categoryId])
+  @@map("product_types")
+}
+
+model Vendor {
+  id          String   @id @default(cuid()) @db.VarChar(191)
+  name        String   @unique
+  contactName String?
+  email       String?
+  phone       String?
+  website     String?
+  address     String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products    Product[]
+  assets      Asset[]
+
+  @@map("vendors")
+}
+
+model Product {
+  id                    String   @id @default(cuid()) @db.VarChar(191)
+  name                  String
+  productTypeId         String?  @db.VarChar(191)
+  manufacturer          String?
+  partNo                String?
+  cost                  Float?
+  sku                   String?
+  categoryId            String   @db.VarChar(191)
+  vendorId              String?  @db.VarChar(191)
+  description           String?
+  modelNumber           String?
+  defaultWarrantyMonths Int?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  productType ProductType? @relation(fields: [productTypeId], references: [id], onDelete: SetNull)
+  category    Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  vendor      Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  assets      Asset[]
+
+  @@index([categoryId])
+  @@index([productTypeId])
+  @@index([vendorId])
+  @@map("products")
+}
+
+model Asset {
+  id                 String     @id @default(cuid()) @db.VarChar(191)
+  name               String
+  assetTag           String     @unique
+  productId          String     @db.VarChar(191)
+  serialNumber       String?
+  vendorId           String?    @db.VarChar(191)
+  purchaseCost       Float?
+  acquisitionDate    DateTime?
+  expiryDate         DateTime?
+  warrantyExpiryDate DateTime?
+  barcodeQr          String?
+  location           String?
+  assetState         AssetState @default(InStore)
+  assignedToId       String?    @db.VarChar(191)
+  departmentId       String?    @db.VarChar(191)
+  siteId             String?    @db.VarChar(191)
+  associatedToId     String?    @db.VarChar(191)
+  retainSite         Boolean    @default(false)
+  stateComments      String?
+  isNewDevice        Boolean    @default(true)
+  assetCheck         String?
+  comment            String?
+  comment2           String?
+  conditionTag       String?
+  grade              String?
+  cell               String?
+  devicePurchase     String?
+  lastSeen           DateTime?
+  numAuthDevices     Int?
+  createdById        String     @db.VarChar(191)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  product            Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  vendor             Vendor?    @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  assignedTo         User?      @relation("AssetAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  department         Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  site               Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  associatedTo       Asset?     @relation("AssetAssociation", fields: [associatedToId], references: [id], onDelete: SetNull)
+  associatedAssets   Asset[]    @relation("AssetAssociation")
+  createdBy          User       @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+  @@index([vendorId])
+  @@index([assignedToId])
+  @@index([departmentId])
+  @@index([siteId])
+  @@index([associatedToId])
+  @@index([createdById])
+  @@map("assets")
+}
+
+model ReportFolder {
+  id         String   @id @default(cuid()) @db.VarChar(191)
+  name       String
+  createdById String  @db.VarChar(191)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  createdBy  User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  reports    Report[]
+
+  @@index([createdById])
+  @@map("report_folders")
+}
+
+model Report {
+  id              String     @id @default(cuid()) @db.VarChar(191)
+  title           String
+  reportType      ReportType @default(Tabular)
+  module          String
+  subModule       String
+  selectedColumns Json
+  filters         Json
+  folderId        String?    @db.VarChar(191)
+  createdById     String     @db.VarChar(191)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  folder          ReportFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy       User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([folderId])
+  @@index([createdById])
+  @@map("reports")
+}

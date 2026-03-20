@@ -1,197 +1,255 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@backend/lib/dbConnect";
-import Report from "@backend/models/Report";
-import Asset from "@backend/models/Asset";
-import Product from "@backend/models/Product";
-import User from "@backend/models/User";
-import Department from "@backend/models/Department";
-import Site from "@backend/models/Site";
-import "@backend/models/Category";
-import "@backend/models/Vendor";
+import { Prisma } from "@prisma/client";
 import { getUserFromRequest } from "@backend/lib/jwt";
+import prisma from "@backend/lib/prisma";
+import {
+  fromPrismaAssetState,
+  serializeAsset,
+  serializeDepartment,
+  serializeProduct,
+  serializeReport,
+  serializeSite,
+  serializeUser,
+  toPrismaAssetState,
+} from "@backend/lib/mysqlSerializers";
+
+type FilterRule = {
+  field: string;
+  operator: string;
+  value: string;
+};
 
 // GET /api/reports/[id]/run — execute the report and return data rows
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const report = await Report.findById(id);
+  const report = await prisma.report.findUnique({
+    where: { id },
+    include: {
+      createdBy: { select: { id: true, firstName: true, lastName: true } },
+      folder: { include: { createdBy: { select: { id: true, firstName: true, lastName: true } } } },
+    },
+  });
+
   if (!report) return NextResponse.json({ message: "Report not found" }, { status: 404 });
 
-  // ── Build Mongoose query based on module ─────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const query: Record<string, any> = {};
-
-  // Apply subModule filter (category name for Assets module)
-  if (report.module === "Assets" && report.subModule && report.subModule !== "All") {
-    // subModule is a category name — we'll filter post-fetch
-  }
-
-  // Apply report filters
-  for (const f of report.filters) {
-    if (!f.value) continue;
-    applyFilter(query, f.field, f.operator, f.value);
-  }
-
+  const filters = toFilterRules(report.filters);
+  const where = buildWhereForModule(report.module, filters, report.subModule);
   let rows: Record<string, unknown>[] = [];
 
   if (report.module === "Assets") {
-    const assets = await Asset.find(query)
-      .populate({ path: "product", select: "name sku category vendor", populate: [{ path: "category", select: "name" }, { path: "vendor", select: "name" }] })
-      .populate("vendor", "name")
-      .populate("department", "name code")
-      .populate("site", "name")
-      .populate("assignedTo", "name email")
-      .populate("associatedTo", "name assetTag")
-      .populate("createdBy", "name")
-      .lean();
+    const assets = await prisma.asset.findMany({
+      where: where as Prisma.AssetWhereInput,
+      include: {
+        product: { include: { category: true, vendor: true, productType: { include: { category: true } } } },
+        vendor: true,
+        department: true,
+        site: true,
+        assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
+        associatedTo: { select: { id: true, name: true, assetTag: true } },
+        createdBy: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
 
-    // Filter by category name (subModule)
-    const filtered =
-      report.subModule && report.subModule !== "All"
-        ? assets.filter(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (a: any) => a.product?.category?.name === report.subModule
-          )
-        : assets;
-
-    // Apply string-based filters that need populated data (e.g. site.name)
-    const postFiltered = applyPostFilters(filtered, report.filters);
-
-    rows = postFiltered.map((a) => flattenAsset(a));
+    const filtered = applyPostFilters(assets.map(serializeAsset), filters);
+    rows = filtered.map((a) => flattenAsset(a));
   } else if (report.module === "Sites") {
-    const sites = await Site.find(query).lean();
-    const postFiltered = applyPostFilters(sites, report.filters);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rows = postFiltered.map((s: any) => ({
-      _id: s._id?.toString(),
+    const sites = await prisma.site.findMany({ where: where as Prisma.SiteWhereInput });
+    const filtered = applyPostFilters(sites.map(serializeSite), filters);
+    rows = filtered.map((s) => ({
+      _id: s._id,
       name: s.name ?? "",
       description: s.description ?? "",
       country: s.country ?? "",
-      createdAt: s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "",
+      createdAt: s.createdAt ? new Date(String(s.createdAt)).toLocaleDateString() : "",
     }));
   } else if (report.module === "Departments") {
-    const departments = await Department.find(query).lean();
-    const postFiltered = applyPostFilters(departments, report.filters);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rows = postFiltered.map((d: any) => ({
-      _id: d._id?.toString(),
+    const departments = await prisma.department.findMany({ where: where as Prisma.DepartmentWhereInput });
+    const filtered = applyPostFilters(departments.map(serializeDepartment), filters);
+    rows = filtered.map((d) => ({
+      _id: d._id,
       name: d.name ?? "",
       code: d.code ?? "",
       description: d.description ?? "",
       isActive: d.isActive ? "Yes" : "No",
-      createdAt: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : "",
+      createdAt: d.createdAt ? new Date(String(d.createdAt)).toLocaleDateString() : "",
     }));
   } else if (report.module === "Users") {
-    const usersQuery = { ...query };
-    if (report.subModule && report.subModule !== "All") {
-      usersQuery["role"] = report.subModule;
-    }
-    const users = await User.find(usersQuery)
-      .populate("department", "name")
-      .populate("site", "name")
-      .lean();
-    const postFiltered = applyPostFilters(users, report.filters);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rows = postFiltered.map((u: any) => ({
-      _id: u._id?.toString(),
+    const users = await prisma.user.findMany({
+      where: where as Prisma.UserWhereInput,
+      include: {
+        department: { select: { id: true, name: true, code: true } },
+        site: { select: { id: true, name: true } },
+      },
+    });
+
+    const filtered = applyPostFilters(users.map(serializeUser), filters);
+    rows = filtered.map((u) => ({
+      _id: u._id,
       name: u.name ?? "",
       email: u.email ?? "",
       role: u.role ?? "",
-      "department.name": u.department?.name ?? "",
-      "site.name": u.site?.name ?? "",
-      createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "",
+      "department.name": (u.department as { name?: string } | null)?.name ?? "",
+      "site.name": (u.site as { name?: string } | null)?.name ?? "",
+      createdAt: u.createdAt ? new Date(String(u.createdAt)).toLocaleDateString() : "",
     }));
   } else if (report.module === "Products") {
-    const products = await Product.find(query)
-      .populate("category", "name")
-      .populate("vendor", "name")
-      .lean();
-    const postFiltered = applyPostFilters(products, report.filters);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rows = postFiltered.map((p: any) => ({
-      _id: p._id?.toString(),
+    const products = await prisma.product.findMany({
+      where: where as Prisma.ProductWhereInput,
+      include: { category: true, vendor: true, productType: { include: { category: true } } },
+    });
+
+    const filtered = applyPostFilters(products.map(serializeProduct), filters);
+    rows = filtered.map((p) => ({
+      _id: p._id,
       name: p.name ?? "",
       sku: p.sku ?? "",
       description: p.description ?? "",
-      "category.name": p.category?.name ?? "",
-      "vendor.name": p.vendor?.name ?? "",
-      createdAt: p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "",
+      "category.name": (p.category as { name?: string } | null)?.name ?? "",
+      "vendor.name": (p.vendor as { name?: string } | null)?.name ?? "",
+      createdAt: p.createdAt ? new Date(String(p.createdAt)).toLocaleDateString() : "",
     }));
   }
 
   return NextResponse.json({
-    report: {
-      _id: report._id,
-      title: report.title,
-      reportType: report.reportType,
-      module: report.module,
-      subModule: report.subModule,
-      selectedColumns: report.selectedColumns,
-      filters: report.filters,
-    },
+    report: serializeReport(report),
     rows,
     total: rows.length,
   });
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+function toFilterRules(input: unknown): FilterRule[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((item) => item as Partial<FilterRule>)
+    .filter((item) => !!item.field)
+    .map((item) => ({
+      field: item.field || "",
+      operator: item.operator || "is",
+      value: item.value || "",
+    }));
+}
 
-function applyFilter(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query: Record<string, any>,
+function buildWhereForModule(moduleName: string, filters: FilterRule[], subModule: string) {
+  if (moduleName === "Assets") {
+    const where: Prisma.AssetWhereInput = {};
+    if (subModule && subModule !== "All") {
+      where.product = { category: { name: subModule } };
+    }
+
+    for (const f of filters) {
+      if (!f.value) continue;
+      if (f.field === "assetTag") applyStringFilter(where, "assetTag", f.operator, f.value);
+      if (f.field === "name") applyStringFilter(where, "name", f.operator, f.value);
+      if (f.field === "serialNumber") applyStringFilter(where, "serialNumber", f.operator, f.value);
+      if (f.field === "location") applyStringFilter(where, "location", f.operator, f.value);
+      if (f.field === "barcodeQr") applyStringFilter(where, "barcodeQr", f.operator, f.value);
+      if (f.field === "assetState") {
+        where.assetState = toPrismaAssetState(f.value) as Prisma.AssetWhereInput["assetState"];
+      }
+    }
+
+    return where;
+  }
+
+  if (moduleName === "Sites") {
+    const where: Prisma.SiteWhereInput = {};
+    for (const f of filters) {
+      if (!f.value) continue;
+      if (f.field === "name") applyStringFilter(where, "name", f.operator, f.value);
+      if (f.field === "country") applyStringFilter(where, "country", f.operator, f.value);
+      if (f.field === "description") applyStringFilter(where, "description", f.operator, f.value);
+    }
+    return where;
+  }
+
+  if (moduleName === "Departments") {
+    const where: Prisma.DepartmentWhereInput = {};
+    for (const f of filters) {
+      if (!f.value) continue;
+      if (f.field === "name") applyStringFilter(where, "name", f.operator, f.value);
+      if (f.field === "code") applyStringFilter(where, "code", f.operator, f.value);
+      if (f.field === "description") applyStringFilter(where, "description", f.operator, f.value);
+    }
+    return where;
+  }
+
+  if (moduleName === "Users") {
+    const where: Prisma.UserWhereInput = {};
+    if (subModule && subModule !== "All") {
+      where.role = subModule as Prisma.UserWhereInput["role"];
+    }
+
+    for (const f of filters) {
+      if (!f.value) continue;
+      if (f.field === "name") {
+        where.OR = [
+          { firstName: { contains: f.value } },
+          { lastName: { contains: f.value } },
+        ];
+      }
+      if (f.field === "email") applyStringFilter(where, "email", f.operator, f.value);
+      if (f.field === "role") where.role = f.value as Prisma.UserWhereInput["role"];
+    }
+
+    return where;
+  }
+
+  if (moduleName === "Products") {
+    const where: Prisma.ProductWhereInput = {};
+    for (const f of filters) {
+      if (!f.value) continue;
+      if (f.field === "name") applyStringFilter(where, "name", f.operator, f.value);
+      if (f.field === "sku") applyStringFilter(where, "sku", f.operator, f.value);
+      if (f.field === "description") applyStringFilter(where, "description", f.operator, f.value);
+    }
+    return where;
+  }
+
+  return {};
+}
+
+function applyStringFilter(
+  target: Record<string, unknown>,
   field: string,
   operator: string,
   value: string
 ) {
-  // Only handle top-level direct schema fields here; nested/populated fields are post-filtered
-  const directFields: Record<string, string> = {
-    assetTag: "assetTag",
-    name: "name",
-    serialNumber: "serialNumber",
-    assetState: "assetState",
-    location: "location",
-    barcodeQr: "barcodeQr",
-  };
+  if (operator === "is") {
+    target[field] = value;
+    return;
+  }
 
-  const mongoField = directFields[field];
-  if (!mongoField) return;
+  if (operator === "is_not") {
+    target.NOT = { ...(target.NOT as object), [field]: value };
+    return;
+  }
 
-  switch (operator) {
-    case "is":
-      query[mongoField] = value;
-      break;
-    case "is_not":
-      query[mongoField] = { $ne: value };
-      break;
-    case "contains":
-      query[mongoField] = { $regex: value, $options: "i" };
-      break;
-    case "starts_with":
-      query[mongoField] = { $regex: `^${value}`, $options: "i" };
-      break;
-    case "ends_with":
-      query[mongoField] = { $regex: `${value}$`, $options: "i" };
-      break;
+  if (operator === "contains") {
+    target[field] = { contains: value, mode: "insensitive" };
+    return;
+  }
+
+  if (operator === "starts_with") {
+    target[field] = { startsWith: value, mode: "insensitive" };
+    return;
+  }
+
+  if (operator === "ends_with") {
+    target[field] = { endsWith: value, mode: "insensitive" };
   }
 }
 
-function applyPostFilters(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  records: any[],
-  filters: { field: string; operator: string; value: string }[]
-) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return records.filter((record: any) => {
+function applyPostFilters(records: Record<string, unknown>[], filters: FilterRule[]) {
+  return records.filter((record) => {
     for (const f of filters) {
       if (!f.value) continue;
-      // Skip fields handled in query already
-      const directFields = ["assetTag", "name", "serialNumber", "assetState", "location", "barcodeQr"];
+      const directFields = ["assetTag", "name", "serialNumber", "assetState", "location", "barcodeQr", "email", "sku", "description", "country", "code", "role"];
       if (directFields.includes(f.field)) continue;
 
       const val = getNestedValue(record, f.field);
@@ -201,13 +259,12 @@ function applyPostFilters(
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getNestedValue(obj: any, path: string): string {
+function getNestedValue(obj: Record<string, unknown>, path: string): string {
   const parts = path.split(".");
-  let current = obj;
+  let current: unknown = obj;
   for (const part of parts) {
-    if (current == null) return "";
-    current = current[part];
+    if (current == null || typeof current !== "object") return "";
+    current = (current as Record<string, unknown>)[part];
   }
   return current?.toString() ?? "";
 }
@@ -225,20 +282,30 @@ function matchesFilter(val: string, operator: string, filterValue: string): bool
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function flattenAsset(a: any): Record<string, unknown> {
+function flattenAsset(a: Record<string, unknown>): Record<string, unknown> {
+  const product = (a.product || {}) as Record<string, unknown>;
+  const productCategory = (product.category || {}) as Record<string, unknown>;
+  const productVendor = (product.vendor || {}) as Record<string, unknown>;
+  const vendor = (a.vendor || {}) as Record<string, unknown>;
+  const department = (a.department || {}) as Record<string, unknown>;
+  const site = (a.site || {}) as Record<string, unknown>;
+  const assignedTo = (a.assignedTo || {}) as Record<string, unknown>;
+  const associatedTo = (a.associatedTo || {}) as Record<string, unknown>;
+  const createdBy = (a.createdBy || {}) as Record<string, unknown>;
+
   return {
-    _id: a._id?.toString(),
+    _id: a._id,
     assetTag: a.assetTag ?? "",
     name: a.name ?? "",
     serialNumber: a.serialNumber ?? "",
     barcodeQr: a.barcodeQr ?? "",
     location: a.location ?? "",
-    assetState: a.assetState ?? "",
+    assetState:
+      typeof a.assetState === "string" ? fromPrismaAssetState(a.assetState) : a.assetState ?? "",
     purchaseCost: a.purchaseCost ?? null,
-    acquisitionDate: a.acquisitionDate ? new Date(a.acquisitionDate).toLocaleDateString() : "",
-    expiryDate: a.expiryDate ? new Date(a.expiryDate).toLocaleDateString() : "",
-    warrantyExpiryDate: a.warrantyExpiryDate ? new Date(a.warrantyExpiryDate).toLocaleDateString() : "",
+    acquisitionDate: a.acquisitionDate ? new Date(String(a.acquisitionDate)).toLocaleDateString() : "",
+    expiryDate: a.expiryDate ? new Date(String(a.expiryDate)).toLocaleDateString() : "",
+    warrantyExpiryDate: a.warrantyExpiryDate ? new Date(String(a.warrantyExpiryDate)).toLocaleDateString() : "",
     isNewDevice: a.isNewDevice ? "Yes" : "No",
     comment: a.comment ?? "",
     comment2: a.comment2 ?? "",
@@ -246,22 +313,21 @@ function flattenAsset(a: any): Record<string, unknown> {
     grade: a.grade ?? "",
     cell: a.cell ?? "",
     devicePurchase: a.devicePurchase ?? "",
-    lastSeen: a.lastSeen ? new Date(a.lastSeen).toLocaleDateString() : "",
+    lastSeen: a.lastSeen ? new Date(String(a.lastSeen)).toLocaleDateString() : "",
     numAuthDevices: a.numAuthDevices ?? "",
     stateComments: a.stateComments ?? "",
-    // Populated
-    "product.name": a.product?.name ?? "",
-    "product.sku": a.product?.sku ?? "",
-    "product.category.name": a.product?.category?.name ?? "",
-    "product.vendor.name": a.product?.vendor?.name ?? "",
-    "vendor.name": a.vendor?.name ?? "",
-    "department.name": a.department?.name ?? "",
-    "department.code": a.department?.code ?? "",
-    "site.name": a.site?.name ?? "",
-    "assignedTo.name": a.assignedTo?.name ?? "Not Assigned",
-    "assignedTo.email": a.assignedTo?.email ?? "",
-    "associatedTo.assetTag": a.associatedTo?.assetTag ?? "",
-    "createdBy.name": a.createdBy?.name ?? "",
-    createdAt: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "",
+    "product.name": product.name ?? "",
+    "product.sku": product.sku ?? "",
+    "product.category.name": productCategory.name ?? "",
+    "product.vendor.name": productVendor.name ?? "",
+    "vendor.name": vendor.name ?? "",
+    "department.name": department.name ?? "",
+    "department.code": department.code ?? "",
+    "site.name": site.name ?? "",
+    "assignedTo.name": assignedTo.name ?? "Not Assigned",
+    "assignedTo.email": assignedTo.email ?? "",
+    "associatedTo.assetTag": associatedTo.assetTag ?? "",
+    "createdBy.name": createdBy.name ?? "",
+    createdAt: a.createdAt ? new Date(String(a.createdAt)).toLocaleDateString() : "",
   };
 }

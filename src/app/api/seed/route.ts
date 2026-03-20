@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import dbConnect from "@backend/lib/dbConnect";
-import User from "@backend/models/User";
-import Department from "@backend/models/Department";
+import bcrypt from "bcryptjs";
+import prisma from "@backend/lib/prisma";
+import { serializeUser } from "@backend/lib/mysqlSerializers";
 
 const DEFAULT_DEPARTMENTS = [
   { name: "Programs", code: "PROG", description: "Programs department" },
@@ -12,36 +12,40 @@ const DEFAULT_DEPARTMENTS = [
 ];
 
 export async function POST() {
-  await dbConnect();
-
   // Seed default departments
   for (const dept of DEFAULT_DEPARTMENTS) {
-    const exists = await Department.findOne({ code: dept.code });
+    const exists = await prisma.department.findFirst({ where: { code: dept.code } });
     if (!exists) {
-      await Department.create(dept);
+      await prisma.department.create({ data: dept });
     }
   }
 
   // Seed admin user
-  const existing = await User.findOne({ email: "admin@inventory.com" });
+  const existing = await prisma.user.findUnique({ where: { email: "admin@inventory.com" } });
   if (existing) {
     return NextResponse.json({ message: "Admin already exists. Default departments have been seeded." }, { status: 200 });
   }
 
-  const admin = await User.create({
+  const admin = await prisma.user.create({
+    data: {
     firstName: "Super",
     lastName: "Admin",
     displayName: "Super Admin",
     email: "admin@inventory.com",
-    password: "Admin@123",
+    password: await bcrypt.hash("Admin@123", 12),
     role: "admin",
     isActive: true,
+    },
+    include: {
+      department: { select: { id: true, name: true, code: true } },
+      site: { select: { id: true, name: true } },
+    },
   });
 
   return NextResponse.json({
     message: "Admin created and default departments seeded",
     credentials: { email: "admin@inventory.com", password: "Admin@123" },
-    user: { id: admin._id, name: `${admin.firstName} ${admin.lastName}`.trim(), email: admin.email, role: admin.role },
+    user: serializeUser(admin),
     departments: DEFAULT_DEPARTMENTS.map((d) => d.name),
   });
 }

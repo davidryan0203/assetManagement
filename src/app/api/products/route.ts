@@ -1,33 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@backend/lib/dbConnect";
-import Product from "@backend/models/Product";
-import "@backend/models/Category";
-import "@backend/models/Vendor";
-import "@backend/models/ProductType";
 import { getUserFromRequest } from "@backend/lib/jwt";
+import prisma from "@backend/lib/prisma";
+import { serializeProduct } from "@backend/lib/mysqlSerializers";
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
 
-  const query: Record<string, unknown> = {};
-  if (category) query.category = category;
+  const products = await prisma.product.findMany({
+    where: category ? { categoryId: category } : {},
+    include: { category: true, vendor: true, productType: { include: { category: true } } },
+    orderBy: { name: "asc" },
+  });
 
-  const products = await Product.find(query)
-    .populate("category", "name")
-    .populate("vendor", "name")
-    .populate("productType", "name type")
-    .sort({ name: 1 });
-
-  return NextResponse.json({ products });
+  return NextResponse.json({ products: products.map(serializeProduct) });
 }
 
 export async function POST(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -38,18 +30,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Name and category are required" }, { status: 400 });
   }
 
-  const product = await Product.create({
-    name, productType: productType || null, manufacturer, partNo, cost: cost || null,
-    sku, category, vendor: vendor || null,
-    description, modelNumber,
-    defaultWarrantyMonths: defaultWarrantyMonths || null,
+  const product = await prisma.product.create({
+    data: {
+      name,
+      manufacturer: manufacturer || "",
+      partNo: partNo || "",
+      cost: cost ?? null,
+      sku: sku || "",
+      description: description || "",
+      modelNumber: modelNumber || "",
+      defaultWarrantyMonths: defaultWarrantyMonths ?? null,
+      category: { connect: { id: category } },
+      ...(vendor ? { vendor: { connect: { id: vendor } } } : {}),
+      ...(productType ? { productType: { connect: { id: productType } } } : {}),
+    },
+    include: { category: true, vendor: true, productType: { include: { category: true } } },
   });
 
-  const populated = await product.populate([
-    { path: "category", select: "name" },
-    { path: "vendor", select: "name" },
-    { path: "productType", select: "name type" },
-  ]);
-
-  return NextResponse.json({ message: "Product created", product: populated }, { status: 201 });
+  return NextResponse.json({ message: "Product created", product: serializeProduct(product) }, { status: 201 });
 }

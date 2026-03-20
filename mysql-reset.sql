@@ -1,0 +1,2 @@
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'Inv3ntory#Root2026$X';
+FLUSH PRIVILEGES;

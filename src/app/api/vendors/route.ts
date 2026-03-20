@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@backend/lib/dbConnect";
-import Vendor from "@backend/models/Vendor";
+import { Prisma } from "@prisma/client";
 import { getUserFromRequest } from "@backend/lib/jwt";
+import prisma from "@backend/lib/prisma";
+import { serializeVendor } from "@backend/lib/mysqlSerializers";
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-  const vendors = await Vendor.find({}).sort({ name: 1 });
-  return NextResponse.json({ vendors });
+  const vendors = await prisma.vendor.findMany({ orderBy: { name: "asc" } });
+  return NextResponse.json({ vendors: vendors.map(serializeVendor) });
 }
 
 export async function POST(req: NextRequest) {
-  await dbConnect();
   const currentUser = getUserFromRequest(req);
   if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -22,9 +21,26 @@ export async function POST(req: NextRequest) {
   const { name, contactName, email, phone, website, address, notes } = await req.json();
   if (!name) return NextResponse.json({ message: "Vendor name is required" }, { status: 400 });
 
-  const existing = await Vendor.findOne({ name: { $regex: `^${name}$`, $options: "i" } });
+  const existing = await prisma.vendor.findFirst({ where: { name } });
   if (existing) return NextResponse.json({ message: "Vendor already exists" }, { status: 409 });
 
-  const vendor = await Vendor.create({ name, contactName, email, phone, website, address, notes });
-  return NextResponse.json({ message: "Vendor created", vendor }, { status: 201 });
+  try {
+    const vendor = await prisma.vendor.create({
+      data: {
+        name,
+        contactName: contactName || "",
+        email: email || "",
+        phone: phone || "",
+        website: website || "",
+        address: address || "",
+        notes: notes || "",
+      },
+    });
+    return NextResponse.json({ message: "Vendor created", vendor: serializeVendor(vendor) }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ message: "Vendor already exists" }, { status: 409 });
+    }
+    throw error;
+  }
 }

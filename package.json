@@ -6,15 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
+    "@prisma/client": "^6.16.0",
     "axios": "^1.6.8",
     "bcryptjs": "^2.4.3",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.3.2",
     "next": "^16.1.6",
+    "prisma": "^6.16.0",
     "react": "^18",
     "react-dom": "^18",
     "react-hot-toast": "^2.4.1",
