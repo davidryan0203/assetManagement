@@ -9,6 +9,33 @@ import { REPORT_MODULES, FILTER_OPERATORS, getModuleDef } from "@backend/lib/rep
 
 interface SelectedColumn { key: string; label: string; }
 interface FilterRule { field: string; operator: string; value: string; }
+interface SiteOption { _id?: string; id?: string; name: string; }
+interface CategoryOption { _id?: string; id?: string; name: string; }
+interface ProductTypeOption { _id?: string; id?: string; name: string; }
+interface VendorOption { _id?: string; id?: string; name: string; }
+interface DepartmentOption { _id?: string; id?: string; name: string; }
+interface ProductOption { _id?: string; id?: string; name: string; }
+interface UserOption { _id?: string; id?: string; name?: string; firstName?: string; lastName?: string; }
+
+const ASSET_FILTER_FIELDS: SelectedColumn[] = [
+  { key: "assetState", label: "State" },
+  { key: "acquisitionDate", label: "Acquisition Date" },
+  { key: "product.name", label: "Product" },
+  { key: "product.category.name", label: "Product Type" },
+  { key: "site.name", label: "Site" },
+  { key: "department.name", label: "Department" },
+  { key: "assignedTo.name", label: "User" },
+];
+
+const ASSET_STATE_OPTIONS = [
+  "In Store",
+  "Assigned",
+  "Under Repair",
+  "Retired",
+  "Disposed",
+  "Lost",
+  "Missing",
+];
 
 function WizardContent() {
   const router = useRouter();
@@ -30,6 +57,13 @@ function WizardContent() {
 
   // Filters
   const [filters, setFilters] = useState<FilterRule[]>([]);
+  const [sites, setSites] = useState<SiteOption[]>([]);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [productTypes, setProductTypes] = useState<ProductTypeOption[]>([]);
+  const [vendors, setVendors] = useState<VendorOption[]>([]);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
 
   const moduleDef = getModuleDef(module);
   const availableColumns = moduleDef?.columns ?? [];
@@ -39,6 +73,7 @@ function WizardContent() {
     : availableColumns;
 
   const selectedKeys = new Set(selectedColumns.map((c) => c.key));
+  const filterFieldOptions = module === "Assets" ? ASSET_FILTER_FIELDS : availableColumns;
 
   useEffect(() => {
     if (!reportId) { router.push("/dashboard/reports/new"); return; }
@@ -55,6 +90,26 @@ function WizardContent() {
       router.push("/dashboard/reports");
     }).finally(() => setLoading(false));
   }, [reportId, router]);
+
+  useEffect(() => {
+    Promise.all([
+      api.get("/sites").catch(() => ({ data: { sites: [] } })),
+      api.get("/categories").catch(() => ({ data: { categories: [] } })),
+      api.get("/product-types").catch(() => ({ data: { productTypes: [] } })),
+      api.get("/vendors").catch(() => ({ data: { vendors: [] } })),
+      api.get("/departments").catch(() => ({ data: { departments: [] } })),
+      api.get("/products").catch(() => ({ data: { products: [] } })),
+      api.get("/users").catch(() => ({ data: { users: [] } })),
+    ]).then(([sitesRes, categoriesRes, productTypesRes, vendorsRes, departmentsRes, productsRes, usersRes]) => {
+      setSites(sitesRes.data?.sites || []);
+      setCategories(categoriesRes.data?.categories || []);
+      setProductTypes(productTypesRes.data?.productTypes || []);
+      setVendors(vendorsRes.data?.vendors || []);
+      setDepartments(departmentsRes.data?.departments || []);
+      setProducts(productsRes.data?.products || []);
+      setUsers(usersRes.data?.users || []);
+    });
+  }, []);
 
   const toggleColumn = (key: string, label: string) => {
     if (selectedKeys.has(key)) {
@@ -73,7 +128,7 @@ function WizardContent() {
   };
 
   const addFilter = () => {
-    const firstCol = availableColumns[0];
+    const firstCol = filterFieldOptions[0];
     setFilters((prev) => [...prev, {
       field: firstCol?.key ?? "",
       operator: "is",
@@ -82,7 +137,52 @@ function WizardContent() {
   };
 
   const updateFilter = (index: number, key: keyof FilterRule, value: string) => {
-    setFilters((prev) => prev.map((f, i) => i === index ? { ...f, [key]: value } : f));
+    setFilters((prev) => prev.map((f, i) => {
+      if (i !== index) return f;
+      if (key === "field") {
+        // Reset stale value when switching to a different filter field.
+        return { ...f, field: value, value: "" };
+      }
+      return { ...f, [key]: value };
+    }));
+  };
+
+  const getFilterValueOptions = (field: string): string[] => {
+    if (field === "site.name") {
+      return sites.map((site) => site.name).filter(Boolean);
+    }
+
+    if (field === "product.category.name" || field === "category.name") {
+      const values = [
+        ...productTypes.map((productType) => productType.name),
+        ...categories.map((category) => category.name),
+      ].filter(Boolean);
+      return Array.from(new Set(values));
+    }
+
+    if (field === "product.name") {
+      return products.map((product) => product.name).filter(Boolean);
+    }
+
+    if (field === "vendor.name" || field === "product.vendor.name") {
+      return vendors.map((vendor) => vendor.name).filter(Boolean);
+    }
+
+    if (field === "department.name") {
+      return departments.map((department) => department.name).filter(Boolean);
+    }
+
+    if (field === "assetState") {
+      return ASSET_STATE_OPTIONS;
+    }
+
+    if (field === "assignedTo.name") {
+      return users
+        .map((user) => user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim())
+        .filter(Boolean);
+    }
+
+    return [];
   };
 
   const removeFilter = (index: number) => {
@@ -146,7 +246,7 @@ function WizardContent() {
               <span className="text-gray-300">|</span>
               <span>Module</span>
               <span className="text-gray-300">|</span>
-              <span>{module} / {subModule}</span>
+              <span>{module}{subModule && subModule !== "All" ? ` / ${subModule}` : ""}</span>
             </div>
           </div>
         </div>
@@ -270,7 +370,7 @@ function WizardContent() {
                     className="input-field text-sm py-1.5 sm:w-48"
                     value={f.field}
                     onChange={(e) => updateFilter(idx, "field", e.target.value)}>
-                    {availableColumns.map((col) => (
+                    {filterFieldOptions.map((col) => (
                       <option key={col.key} value={col.key}>{col.label}</option>
                     ))}
                   </select>
@@ -284,12 +384,31 @@ function WizardContent() {
                     ))}
                   </select>
                   {/* Value */}
-                  <input
-                    className="input-field text-sm py-1.5 flex-1 min-w-32"
-                    value={f.value}
-                    onChange={(e) => updateFilter(idx, "value", e.target.value)}
-                    placeholder="Value..."
-                  />
+                  {f.field === "acquisitionDate" ? (
+                    <input
+                      type="date"
+                      className="input-field text-sm py-1.5 flex-1 min-w-32"
+                      value={f.value}
+                      onChange={(e) => updateFilter(idx, "value", e.target.value)}
+                    />
+                  ) : getFilterValueOptions(f.field).length > 0 ? (
+                    <select
+                      className="input-field text-sm py-1.5 flex-1 min-w-32"
+                      value={f.value}
+                      onChange={(e) => updateFilter(idx, "value", e.target.value)}>
+                      <option value="">-- Select Value --</option>
+                      {getFilterValueOptions(f.field).map((optionValue) => (
+                        <option key={optionValue} value={optionValue}>{optionValue}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="input-field text-sm py-1.5 flex-1 min-w-32"
+                      value={f.value}
+                      onChange={(e) => updateFilter(idx, "value", e.target.value)}
+                      placeholder="Value..."
+                    />
+                  )}
                   <button
                     onClick={() => removeFilter(idx)}
                     className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">

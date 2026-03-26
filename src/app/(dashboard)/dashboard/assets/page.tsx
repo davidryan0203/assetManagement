@@ -439,7 +439,6 @@ export default function AssetsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <DetailRow label="Serial Number" value={a.serialNumber} />
               <DetailRow label="Asset Tag" value={a.assetTag} />
-              <DetailRow label="Product Manufacturer" value={a.product?.vendor?.name} />
               <DetailRow label="Barcode / QR code" value={a.barcodeQr} />
               <DetailRow label="Vendor" value={a.vendor?.name} />
               <DetailRow label="Part No." value={undefined} />

@@ -36,15 +36,12 @@ export default function NewReportPage() {
   const [title, setTitle] = useState("");
   const [reportType, setReportType] = useState("Tabular");
   const [module, setModule] = useState("");
-  const [subModule, setSubModule] = useState("");
+  const [subModule, setSubModule] = useState("All");
   const [saving, setSaving] = useState(false);
-
-  const selectedModuleDef = REPORT_MODULES.find((m) => m.value === module);
 
   const handleProceed = async () => {
     if (!title.trim()) { toast.error("Report title is required"); return; }
     if (!module) { toast.error("Please select a module"); return; }
-    if (!subModule) { toast.error("Please select a source module / sub-module"); return; }
 
     setSaving(true);
     try {
@@ -118,7 +115,7 @@ export default function NewReportPage() {
         </div>
 
         {/* Module */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Module <span className="text-red-500">*</span>
@@ -126,30 +123,18 @@ export default function NewReportPage() {
             <select
               className="input-field"
               value={module}
-              onChange={(e) => { setModule(e.target.value); setSubModule(""); }}>
+              onChange={(e) => {
+                const nextModule = e.target.value;
+                const nextModuleDef = REPORT_MODULES.find((m) => m.value === nextModule);
+                setModule(nextModule);
+                setSubModule(nextModuleDef?.subModules[0]?.value || "All");
+              }}>
               <option value="">-- Select Module --</option>
               {REPORT_MODULES.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
           </div>
-
-          {module && selectedModuleDef && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Source Module <span className="text-red-500">*</span>
-              </label>
-              <select
-                className="input-field"
-                value={subModule}
-                onChange={(e) => setSubModule(e.target.value)}>
-                <option value="">-- Select Source Module --</option>
-                {selectedModuleDef.subModules.map((sm) => (
-                  <option key={sm.value} value={sm.value}>{sm.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
         </div>
 
         {/* Actions */}
