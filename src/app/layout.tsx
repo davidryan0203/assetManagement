@@ -7,8 +7,13 @@ import { Toaster } from "react-hot-toast";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Inventory System",
+  title: "Asset Management System",
   description: "Enterprise Inventory Management System",
+  icons: {
+    icon: "/brand-logo.jpeg",
+    shortcut: "/brand-logo.jpeg",
+    apple: "/brand-logo.jpeg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

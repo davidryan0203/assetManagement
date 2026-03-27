@@ -34,10 +34,10 @@ export default function Navbar() {
       : "badge-staff";
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-5 flex items-center justify-between">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
-        <p className="text-xs text-gray-500 mt-0.5">
+    <header className="bg-white border-b border-gray-200 px-6 py-3.5 flex items-center justify-between">
+      <div className="min-w-0">
+        <h2 className="text-2xl font-semibold text-gray-800 leading-tight">{title}</h2>
+        <p className="text-sm text-gray-500 mt-1 leading-none">
           {new Date().toLocaleDateString("en-US", {
             weekday: "long",
             year: "numeric",

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { useAuth } from "@frontend/context/AuthContext";
 import {
   FiPackage,
@@ -41,6 +43,7 @@ const navItems: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const [logoError, setLogoError] = useState(false);
 
   const filtered = navItems.filter(
     (item) => !item.roles || item.roles.includes(user?.role ?? "")
@@ -49,14 +52,34 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-full">
       {/* Logo */}
-      <div className="p-6 border-b border-gray-200">
+      <div className="px-5 py-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-primary-600 rounded-lg flex items-center justify-center">
-            <FiPackage className="text-white text-lg" />
+          <div className="w-16 h-16 rounded-full border border-gray-200 bg-white overflow-hidden flex items-center justify-center shrink-0">
+            {logoError ? (
+                <Image
+                src="/brand-logo.jpeg"
+                alt="Mamu Tshishkutamashutau Innu Education"
+                width={64}
+                height={64}
+                className="w-full h-full object-cover"
+                onError={() => setLogoError(true)}
+                priority
+              />
+            ) : (
+              <Image
+                src="/brand-logo.png"
+                alt="Mamu Tshishkutamashutau Innu Education"
+                width={64}
+                height={64}
+                className="w-full h-full object-cover"
+                onError={() => setLogoError(true)}
+                priority
+              />
+            )}
           </div>
           <div>
-            <h1 className="font-bold text-gray-900 text-sm">InventoryPro</h1>
-            <p className="text-xs text-gray-500">Asset Management</p>
+            <h1 className="font-bold text-gray-900 text-sm leading-tight">Mamu Tshishkutamashutau Innu Education</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Asset Management System</p>
           </div>
         </div>
       </div>

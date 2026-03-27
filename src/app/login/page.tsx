@@ -51,7 +51,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
             <FiPackage className="text-primary-600 text-3xl" />
           </div>
-          <h1 className="text-3xl font-bold text-white">InventoryPro</h1>
+          <h1 className="text-3xl font-bold text-white">Mamu Tshishkutamashutau Innu Education</h1>
           <p className="text-primary-200 mt-1">Enterprise Asset Management</p>
         </div>
 
