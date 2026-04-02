@@ -30,6 +30,7 @@ function PreviewContent() {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("landscape");
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const paginated = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -95,6 +96,8 @@ function PreviewContent() {
     toast.success("Excel file exported");
   };
 
+  const orientationLabel = printOrientation === "landscape" ? "Landscape" : "Portrait";
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -123,6 +126,20 @@ function PreviewContent() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 text-xs font-medium text-gray-600">
+            <button
+              type="button"
+              onClick={() => setPrintOrientation("portrait")}
+              className={`rounded-md px-3 py-1.5 transition-colors ${printOrientation === "portrait" ? "bg-primary-50 text-primary-700" : "hover:bg-gray-50"}`}>
+              Portrait
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrintOrientation("landscape")}
+              className={`rounded-md px-3 py-1.5 transition-colors ${printOrientation === "landscape" ? "bg-primary-50 text-primary-700" : "hover:bg-gray-50"}`}>
+              Landscape
+            </button>
+          </div>
           {report && (
             <button
               onClick={() => router.push(`/dashboard/reports/wizard?id=${report._id}`)}
@@ -131,7 +148,7 @@ function PreviewContent() {
             </button>
           )}
           <button onClick={handlePrint} className="btn-secondary flex items-center gap-2 text-sm">
-            <FiPrinter className="w-3.5 h-3.5" /> Print Preview
+            <FiPrinter className="w-3.5 h-3.5" /> Print Preview ({orientationLabel})
           </button>
           <div className="relative group">
             <button className="btn-secondary flex items-center gap-2 text-sm">
@@ -150,16 +167,16 @@ function PreviewContent() {
       </div>
 
       {/* Printable report area */}
-      <div ref={printRef} className="card overflow-hidden print:shadow-none print:border-0">
+      <div ref={printRef} className="report-print-area card overflow-hidden print:shadow-none print:border-0">
         {/* Report header (visible in print) */}
         <div className="p-6 border-b border-gray-100 print:p-4">
           <div className="print:block">
             <div className="hidden print:block mb-4">
-              <h1 className="text-2xl font-bold text-gray-900">{report?.title}</h1>
-              <p className="text-sm text-gray-500 mt-1">
+              <h1 className="text-xl font-bold text-gray-900">{report?.title}</h1>
+              <p className="text-xs text-gray-500 mt-1">
                 Generated on: {new Date().toLocaleString()}
               </p>
-              <p className="text-sm text-gray-600 font-semibold mt-1">
+              <p className="text-xs text-gray-600 font-semibold mt-1">
                 Total records: {total.toLocaleString()}
               </p>
             </div>
@@ -194,7 +211,7 @@ function PreviewContent() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="report-table-wrap overflow-x-auto">
           {displayCols.length === 0 || rows.length === 0 ? (
             <div className="py-16 text-center text-gray-400">
               <p className="font-medium">No data to display</p>
@@ -205,11 +222,11 @@ function PreviewContent() {
               </p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="report-table w-full text-[11px] leading-tight">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   {displayCols.map((col) => (
-                    <th key={col.key} className="text-left py-3 px-4 text-gray-500 font-medium text-xs uppercase tracking-wide whitespace-nowrap">
+                    <th key={col.key} className="text-left py-2 px-2 text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap print:whitespace-normal">
                       {col.label}
                     </th>
                   ))}
@@ -219,7 +236,7 @@ function PreviewContent() {
                 {paginated.map((row, idx) => (
                   <tr key={idx} className="hover:bg-gray-50/70 transition-colors print:hover:bg-transparent">
                     {displayCols.map((col) => (
-                      <td key={col.key} className="py-3 px-4 text-gray-700 whitespace-nowrap">
+                      <td key={col.key} className="py-2 px-2 text-gray-700 whitespace-nowrap print:whitespace-normal">
                         {String(row[col.key] ?? "—")}
                       </td>
                     ))}
@@ -258,11 +275,54 @@ function PreviewContent() {
       {/* Print styles */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: ${printOrientation};
+            margin: 12mm;
+          }
+
+          html, body {
+            width: 100%;
+            height: auto !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
           body * { visibility: hidden; }
-          .card, .card * { visibility: visible; }
-          .card { position: absolute; left: 0; top: 0; width: 100%; }
+          .report-print-area, .report-print-area * { visibility: visible; }
+          .report-print-area {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            overflow: visible !important;
+          }
+          .report-table-wrap {
+            overflow: visible !important;
+          }
+          .report-table {
+            width: 100% !important;
+            table-layout: auto;
+            border-collapse: collapse;
+          }
+          .report-table th,
+          .report-table td {
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            padding: 6px 8px;
+          }
+          .report-table thead {
+            display: table-header-group;
+          }
+          .report-table tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
           .print\\:hidden { display: none !important; }
           .hidden.print\\:block { display: block !important; }
+          .print\:whitespace-normal { white-space: normal !important; }
         }
       `}</style>
     </div>

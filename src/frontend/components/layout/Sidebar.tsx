@@ -30,6 +30,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: <FiGrid />, section: "main" },
   { label: "Assets", href: "/dashboard/assets", icon: <FiBox />, section: "main" },
+  { label: "Charts", href: "/dashboard/charts", icon: <FiBarChart2 />, section: "main" },
   { label: "Users", href: "/dashboard/users", icon: <FiUsers />, roles: ["admin", "manager"], section: "main" },
   { label: "Departments", href: "/dashboard/departments", icon: <FiBriefcase />, roles: ["admin"], section: "main" },
   { label: "Sites", href: "/dashboard/sites", icon: <FiMapPin />, roles: ["admin"], section: "main" },
