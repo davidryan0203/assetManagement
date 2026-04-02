@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import api from "@backend/lib/api";
 import { useAuth } from "@frontend/context/AuthContext";
 import toast from "react-hot-toast";
@@ -53,6 +53,9 @@ interface Asset {
   numAuthDevices?: number;
   createdAt: string;
 }
+
+type SortDirection = "asc" | "desc";
+type AssetSortKey = "assetTag" | "name" | "product" | "category" | "vendor" | "state" | "assignedTo" | "site" | "serialNumber" | "createdAt";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,6 +139,10 @@ export default function AssetsPage() {
   const [search, setSearch] = useState("");
   const [filterState, setFilterState] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
+  const [sortKey, setSortKey] = useState<AssetSortKey>("createdAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [tablePage, setTablePage] = useState(1);
 
   // Detail panel
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -156,6 +163,28 @@ export default function AssetsPage() {
   const [assigning, setAssigning] = useState(false);
 
   const selectedProductObj = products.find((p) => p._id === form.product);
+
+  const handleSort = (key: AssetSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const sortedAssets = useMemo(() => {
+    return [...assets].sort((a, b) => {
+      const left = assetSortValue(a, sortKey);
+      const right = assetSortValue(b, sortKey);
+      if (left === right) return 0;
+      if (sortDirection === "asc") return left > right ? 1 : -1;
+      return left > right ? -1 : 1;
+    });
+  }, [assets, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedAssets.length / rowsPerPage));
+  const paginatedAssets = sortedAssets.slice((tablePage - 1) * rowsPerPage, tablePage * rowsPerPage);
 
   // When a user is selected in assignForm, auto-fill site from user's site
   const selectedAssignUser = users.find((u) => u._id === assignForm.assignedTo);
@@ -180,6 +209,14 @@ export default function AssetsPage() {
   }, [search, filterState, filterCategory]);
 
   useEffect(() => { fetchAssets(); }, [fetchAssets]);
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [search, filterState, filterCategory, rowsPerPage, sortKey, sortDirection]);
+
+  useEffect(() => {
+    if (tablePage > totalPages) setTablePage(totalPages);
+  }, [tablePage, totalPages]);
 
   useEffect(() => {
     Promise.all([
@@ -645,6 +682,26 @@ export default function AssetsPage() {
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
         </select>
+        <select className="input-field sm:w-44" value={`${sortKey}:${sortDirection}`} onChange={(e) => {
+          const [key, dir] = e.target.value.split(":") as [AssetSortKey, SortDirection];
+          setSortKey(key);
+          setSortDirection(dir);
+        }}>
+          <option value="createdAt:desc">Newest first</option>
+          <option value="createdAt:asc">Oldest first</option>
+          <option value="assetTag:asc">Asset Tag A-Z</option>
+          <option value="assetTag:desc">Asset Tag Z-A</option>
+          <option value="name:asc">Name A-Z</option>
+          <option value="name:desc">Name Z-A</option>
+          <option value="state:asc">State A-Z</option>
+          <option value="site:asc">Site A-Z</option>
+          <option value="category:asc">Category A-Z</option>
+        </select>
+        <select className="input-field sm:w-32" value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
+          {[20, 50, 100].map((size) => (
+            <option key={size} value={size}>{size} rows</option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -664,20 +721,65 @@ export default function AssetsPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Asset Tag</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Name</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Product</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Category</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Vendor</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">State</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Assigned To</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Site</th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">Serial #</th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("assetTag")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Asset Tag</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "assetTag" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("name")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Name</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "name" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("product")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Product</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "product" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("category")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Category</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "category" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("vendor")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Vendor</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "vendor" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("state")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>State</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "state" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("assignedTo")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Assigned To</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "assignedTo" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("site")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Site</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "site" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
+                    <button type="button" onClick={() => handleSort("serialNumber")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
+                      <span>Serial #</span>
+                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "serialNumber" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+                    </button>
+                  </th>
                   {isManager && <th className="text-right py-3.5 px-4 text-gray-500 font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {assets.map((asset) => (
+                {paginatedAssets.map((asset) => (
                   <tr key={asset._id}
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => setSelectedAsset(asset)}>
@@ -716,6 +818,29 @@ export default function AssetsPage() {
             </table>
           </div>
         )}
+
+        {!loading && sortedAssets.length > 0 && (
+          <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-500">
+            <span>
+              Showing {((tablePage - 1) * rowsPerPage) + 1}–{Math.min(tablePage * rowsPerPage, sortedAssets.length)} of {sortedAssets.length.toLocaleString()} records
+            </span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setTablePage(1)} disabled={tablePage === 1}
+                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-40">First</button>
+              <button onClick={() => setTablePage((p) => Math.max(1, p - 1))} disabled={tablePage === 1}
+                className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40">
+                <FiChevronDown className="-rotate-90" />
+              </button>
+              <span>Page {tablePage} of {totalPages}</span>
+              <button onClick={() => setTablePage((p) => Math.min(totalPages, p + 1))} disabled={tablePage === totalPages}
+                className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40">
+                <FiChevronDown className="rotate-90" />
+              </button>
+              <button onClick={() => setTablePage(totalPages)} disabled={tablePage === totalPages}
+                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-40">Last</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Create Modal */}
@@ -740,6 +865,19 @@ export default function AssetsPage() {
         loading={deleting} />
     </div>
   );
+}
+
+function assetSortValue(asset: Asset, key: AssetSortKey) {
+  if (key === "assetTag") return (asset.assetTag || "").toLowerCase();
+  if (key === "name") return (asset.name || "").toLowerCase();
+  if (key === "product") return (asset.product?.name || "").toLowerCase();
+  if (key === "vendor") return (asset.vendor?.name || asset.product?.vendor?.name || "").toLowerCase();
+  if (key === "state") return (asset.assetState || "").toLowerCase();
+  if (key === "assignedTo") return (asset.assignedTo?.name || "").toLowerCase();
+  if (key === "site") return (asset.site?.name || "").toLowerCase();
+  if (key === "category") return (asset.product?.category?.name || "").toLowerCase();
+  if (key === "serialNumber") return (asset.serialNumber || "").toLowerCase();
+  return new Date(asset.createdAt).getTime().toString().padStart(20, "0");
 }
 
 // ─── Extracted form body (shared between create and edit modals) ──────────────

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useMemo, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@backend/lib/api";
 import toast from "react-hot-toast";
-import { FiArrowLeft, FiPrinter, FiDownload, FiEdit2, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiArrowLeft, FiPrinter, FiDownload, FiEdit2, FiChevronLeft, FiChevronRight, FiChevronDown, FiSearch } from "react-icons/fi";
 
 interface SelectedColumn { key: string; label: string; }
 
@@ -17,7 +17,7 @@ interface ReportMeta {
   selectedColumns: SelectedColumn[];
 }
 
-const PAGE_SIZE = 50;
+type SortDirection = "asc" | "desc";
 
 function PreviewContent() {
   const router = useRouter();
@@ -31,11 +31,43 @@ function PreviewContent() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("landscape");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [sortKey, setSortKey] = useState<string>("");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const paginated = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const columns = report?.selectedColumns ?? [];
   const displayCols = columns.length > 0 ? columns : getDefaultColumns(report?.module ?? "");
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      displayCols.some((col) => String(row[col.key] ?? "").toLowerCase().includes(q))
+    );
+  }, [rows, displayCols, searchQuery]);
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return filteredRows;
+    return [...filteredRows].sort((a, b) => {
+      const left = String(a[sortKey] ?? "").toLowerCase();
+      const right = String(b[sortKey] ?? "").toLowerCase();
+      if (left === right) return 0;
+      if (sortDirection === "asc") return left > right ? 1 : -1;
+      return left > right ? -1 : 1;
+    });
+  }, [filteredRows, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / rowsPerPage));
+  const paginated = sortedRows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, rowsPerPage, sortKey, sortDirection]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   useEffect(() => {
     if (!reportId) { router.push("/dashboard/reports"); return; }
@@ -98,6 +130,15 @@ function PreviewContent() {
 
   const orientationLabel = printOrientation === "landscape" ? "Landscape" : "Portrait";
 
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -126,6 +167,28 @@ function PreviewContent() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              className="input-field text-sm pl-9 py-2 w-60"
+              placeholder="Filter report rows"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
+            <span className="font-medium">Rows</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => setRowsPerPage(Number(e.target.value))}
+              className="bg-transparent outline-none text-gray-700"
+            >
+              {[20, 50, 100].map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 text-xs font-medium text-gray-600">
             <button
               type="button"
@@ -172,6 +235,13 @@ function PreviewContent() {
         <div className="p-6 border-b border-gray-100 print:p-4">
           <div className="print:block">
             <div className="hidden print:block mb-4">
+              <div className="flex items-center gap-4 border-b border-gray-200 pb-3 mb-3">
+                <img src="/brand-logo.jpeg" alt="Mamu Tshishkutamashutau Innu Education" className="h-14 w-14 rounded-full object-cover" />
+                <div>
+                  <p className="text-lg font-bold text-gray-900 leading-tight">Mamu Tshishkutamashutau Innu Education</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Asset Management System</p>
+                </div>
+              </div>
               <h1 className="text-xl font-bold text-gray-900">{report?.title}</h1>
               <p className="text-xs text-gray-500 mt-1">
                 Generated on: {new Date().toLocaleString()}
@@ -227,7 +297,16 @@ function PreviewContent() {
                 <tr>
                   {displayCols.map((col) => (
                     <th key={col.key} className="text-left py-2 px-2 text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap print:whitespace-normal">
-                      {col.label}
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.key)}
+                        className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700"
+                      >
+                        <span className="truncate">{col.label}</span>
+                        <FiChevronDown
+                          className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === col.key ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`}
+                        />
+                      </button>
                     </th>
                   ))}
                 </tr>
@@ -251,7 +330,7 @@ function PreviewContent() {
         {totalPages > 1 && (
           <div className="print:hidden flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
             <span>
-              Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()} records
+              Showing {sortedRows.length === 0 ? 0 : ((page - 1) * rowsPerPage) + 1}–{Math.min(page * rowsPerPage, sortedRows.length)} of {sortedRows.length.toLocaleString()} records
             </span>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage(1)} disabled={page === 1}
