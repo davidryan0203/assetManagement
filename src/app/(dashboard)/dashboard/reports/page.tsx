@@ -37,7 +37,7 @@ interface FolderGroup {
 
 export default function ReportsPage() {
   const router = useRouter();
-  const { isManager, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
 
   const [reports, setReports] = useState<Report[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -169,7 +169,7 @@ export default function ReportsPage() {
           <h2 className="text-xl font-semibold text-gray-900">All Reports</h2>
           <p className="text-sm text-gray-500">{reports.length} report{reports.length !== 1 ? "s" : ""}</p>
         </div>
-        {isManager && (
+        {isAdmin && (
           <div className="flex items-center gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); setShowFolderModal(true); }}
@@ -194,7 +194,7 @@ export default function ReportsPage() {
         <div className="card p-12 text-center text-gray-400">
           <FiBarChart2 className="text-5xl mx-auto mb-3" />
           <p className="font-medium">No reports yet</p>
-          {isManager && (
+          {isAdmin && (
             <p className="text-sm mt-1">
               Click &quot;New Custom Report&quot; to create your first report
             </p>
@@ -219,7 +219,7 @@ export default function ReportsPage() {
                   <span className="text-xs text-gray-400 mr-2">
                     {group.reports.length} report{group.reports.length !== 1 ? "s" : ""}
                   </span>
-                  {group.folder && isManager && (
+                  {group.folder && isAdmin && (
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => { setRenameFolder(group.folder!); setRenameName(group.folder!.name); }}
@@ -281,7 +281,7 @@ export default function ReportsPage() {
                                     title="Run Report">
                                     <FiPlay className="w-3.5 h-3.5" />
                                   </button>
-                                  {isManager && (
+                                  {isAdmin && (
                                     <button
                                       onClick={() => router.push(`/dashboard/reports/wizard?id=${report._id}`)}
                                       className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
@@ -289,7 +289,7 @@ export default function ReportsPage() {
                                       <FiEdit2 className="w-3.5 h-3.5" />
                                     </button>
                                   )}
-                                  {isManager && (
+                                  {isAdmin && (
                                     <button
                                       onClick={() => setDeleteReport(report._id)}
                                       className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"

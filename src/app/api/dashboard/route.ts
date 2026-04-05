@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@backend/lib/jwt";
 import prisma from "@backend/lib/prisma";
 import { serializeAsset } from "@backend/lib/mysqlSerializers";
-import { scopeAssetWhereToUser } from "@backend/lib/siteAccess";
+import { getManagerSiteIds, scopeAssetWhereToUser } from "@backend/lib/siteAccess";
 
 export async function GET(req: NextRequest) {
   const currentUser = getUserFromRequest(req);
   if (!currentUser) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const managerSiteIds = getManagerSiteIds(currentUser);
+  const managerScope = currentUser.role === "manager" && managerSiteIds.length > 0
+    ? { in: managerSiteIds }
+    : null;
 
   const [
     totalAssets,
@@ -22,11 +26,11 @@ export async function GET(req: NextRequest) {
     prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "Assigned" }, currentUser) }),
     prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "UnderRepair" }, currentUser) }),
     prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "Retired" }, currentUser) }),
-    currentUser.role === "manager" && currentUser.siteId
-      ? prisma.user.count({ where: { siteId: currentUser.siteId } })
+    managerScope
+      ? prisma.user.count({ where: { siteId: managerScope } })
       : prisma.user.count(),
-    currentUser.role === "manager" && currentUser.siteId
-      ? prisma.department.count({ where: { users: { some: { siteId: currentUser.siteId } } } })
+    managerScope
+      ? prisma.department.count({ where: { users: { some: { siteId: managerScope } } } })
       : prisma.department.count(),
   ]);
 

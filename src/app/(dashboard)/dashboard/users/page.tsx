@@ -24,6 +24,8 @@ interface User {
   isActive: boolean;
   department?: { _id: string; name: string; code: string } | null;
   site?: { _id: string; name: string } | null;
+  managerSiteIds?: string[];
+  managerSites?: { _id: string; name: string }[];
   createdAt: string;
 }
 
@@ -39,7 +41,7 @@ const roleBadge: Record<string, string> = {
 const emptyForm = {
   firstName: "", lastName: "", displayName: "", employeeId: "", description: "",
   email: "", password: "", phone: "", mobile: "",
-  role: "staff", department: "", site: "", isActive: true,
+  role: "staff", department: "", site: "", managerSiteIds: [] as string[], isActive: true,
 };
 
 const SECTION_HEADER = ({ title }: { title: string }) => (
@@ -110,6 +112,11 @@ export default function UsersPage() {
       role: user.role,
       department: user.department?._id || "",
       site: user.site?._id || "",
+      managerSiteIds: Array.isArray(user.managerSiteIds)
+        ? user.managerSiteIds
+        : Array.isArray(user.managerSites)
+          ? user.managerSites.map((s) => s._id)
+          : [],
       isActive: user.isActive,
     });
     setShowModal(true);
@@ -128,12 +135,17 @@ export default function UsersPage() {
       toast.error("Password is required for new users");
       return;
     }
+    if (form.role === "manager" && form.managerSiteIds.length === 0) {
+      toast.error("Please select at least one site for manager");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         ...form,
         department: form.department || null,
-        site: form.site || null,
+        site: form.role === "manager" ? null : form.site || null,
+        managerSiteIds: form.role === "manager" ? form.managerSiteIds : [],
         password: form.password || undefined,
       };
       if (editUser) {
@@ -241,7 +253,11 @@ export default function UsersPage() {
                       <span className={roleBadge[u.role] || "badge-staff"}>{u.role}</span>
                     </td>
                     <td className="py-3.5 px-4 text-gray-600">{u.department?.name || "—"}</td>
-                    <td className="py-3.5 px-4 text-gray-600">{u.site?.name || "—"}</td>
+                    <td className="py-3.5 px-4 text-gray-600">
+                      {u.role === "manager"
+                        ? (u.managerSites?.map((s) => s.name).join(", ") || u.site?.name || "—")
+                        : (u.site?.name || "—")}
+                    </td>
                     <td className="py-3.5 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${u.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                         {u.isActive ? "Active" : "Inactive"}
@@ -341,16 +357,50 @@ export default function UsersPage() {
               placeholder="Select role"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
-            <SearchableSelect
-              options={sites.map((s) => ({ value: s._id, label: s.name }))}
-              value={form.site}
-              onChange={(v) => setForm((p) => ({ ...p, site: v }))}
-              placeholder="Select site"
-              noneLabel="— No Site —"
-            />
-          </div>
+          {form.role === "manager" ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sites (Manager)</label>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 space-y-1">
+                {sites.length === 0 ? (
+                  <p className="px-2 py-1 text-sm text-gray-400">No sites available</p>
+                ) : (
+                  sites.map((site) => {
+                    const checked = form.managerSiteIds.includes(site._id);
+                    return (
+                      <label key={site._id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setForm((prev) => ({
+                              ...prev,
+                              managerSiteIds: e.target.checked
+                                ? [...prev.managerSiteIds, site._id]
+                                : prev.managerSiteIds.filter((id) => id !== site._id),
+                            }));
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600"
+                        />
+                        <span className="text-sm text-gray-700">{site.name}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">Select one or more sites for manager visibility.</p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
+              <SearchableSelect
+                options={sites.map((s) => ({ value: s._id, label: s.name }))}
+                value={form.site}
+                onChange={(v) => setForm((p) => ({ ...p, site: v }))}
+                placeholder="Select site"
+                noneLabel="— No Site —"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
             <SearchableSelect

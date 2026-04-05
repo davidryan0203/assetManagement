@@ -13,13 +13,21 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const assetState = searchParams.get("assetState");
   const category = searchParams.get("category");
+  const kind = searchParams.get("kind");
   const department = searchParams.get("department");
   const search = searchParams.get("search");
+
+  const productWhere: Prisma.ProductWhereInput = {
+    ...(category ? { categoryId: category } : {}),
+    ...(kind === "Asset" || kind === "Consumable"
+      ? { productType: { type: kind } }
+      : {}),
+  };
 
   const where: Prisma.AssetWhereInput = {
     ...(assetState ? { assetState: toPrismaAssetState(assetState) as Prisma.AssetScalarWhereInput["assetState"] } : {}),
     ...(department ? { departmentId: department } : {}),
-    ...(category ? { product: { categoryId: category } } : {}),
+    ...(Object.keys(productWhere).length > 0 ? { product: productWhere } : {}),
     ...(search
       ? {
           OR: [
@@ -49,24 +57,43 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ assets: assets.map(serializeAsset) });
 }
 
-// POST create asset (admin & manager)
+// POST create asset (admin only)
 export async function POST(req: NextRequest) {
   const currentUser = getUserFromRequest(req);
-  if (!currentUser || currentUser.role === "staff") {
+  if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
   const body = await req.json();
-  const { name, assetTag, product } = body;
+  const { name, assetTag, product, kind } = body;
   const associatedToIds = Array.isArray(body.associatedToIds)
     ? body.associatedToIds.filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
     : [];
 
-  if (!name || !assetTag || !product) {
-    return NextResponse.json({ message: "Name, asset tag, and product are required" }, { status: 400 });
+  if (!name || !product) {
+    return NextResponse.json({ message: "Name and product are required" }, { status: 400 });
   }
 
-  const existing = await prisma.asset.findUnique({ where: { assetTag: assetTag.toUpperCase() } });
+  let normalizedAssetTag = typeof assetTag === "string" ? assetTag.trim().toUpperCase() : "";
+  if (!normalizedAssetTag && kind === "Consumable") {
+    normalizedAssetTag = `CON-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  }
+  if (!normalizedAssetTag) {
+    return NextResponse.json({ message: "Asset tag is required" }, { status: 400 });
+  }
+
+  if (kind === "Consumable") {
+    const productRecord = await prisma.product.findUnique({
+      where: { id: product },
+      include: { productType: true },
+    });
+
+    if (!productRecord || productRecord.productType?.type !== "Consumable") {
+      return NextResponse.json({ message: "Selected product must be a consumable" }, { status: 400 });
+    }
+  }
+
+  const existing = await prisma.asset.findUnique({ where: { assetTag: normalizedAssetTag } });
   if (existing) {
     return NextResponse.json({ message: "Asset tag already exists" }, { status: 409 });
   }
@@ -74,7 +101,8 @@ export async function POST(req: NextRequest) {
   const asset = await prisma.asset.create({
     data: {
       name: body.name,
-      assetTag: assetTag.toUpperCase(),
+      assetTag: normalizedAssetTag,
+      quantity: Number.isFinite(Number(body.quantity)) ? Math.max(0, Number(body.quantity)) : 0,
       serialNumber: body.serialNumber || "",
       purchaseCost: body.purchaseCost ?? null,
       acquisitionDate: body.acquisitionDate ? new Date(body.acquisitionDate) : null,
@@ -98,9 +126,7 @@ export async function POST(req: NextRequest) {
       product: { connect: { id: body.product } },
       ...(body.vendor ? { vendor: { connect: { id: body.vendor } } } : {}),
       ...(body.department ? { department: { connect: { id: body.department } } } : {}),
-      ...(currentUser.role === "manager" && currentUser.siteId
-        ? { site: { connect: { id: currentUser.siteId } } }
-        : body.site ? { site: { connect: { id: body.site } } } : {}),
+      ...(body.site ? { site: { connect: { id: body.site } } } : {}),
       ...(body.assignedTo ? { assignedTo: { connect: { id: body.assignedTo } } } : {}),
       createdBy: { connect: { id: currentUser.id } },
     },

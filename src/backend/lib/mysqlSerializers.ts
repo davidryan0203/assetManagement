@@ -108,6 +108,7 @@ type AssetShape = {
   id: string;
   name: string;
   assetTag: string;
+  quantity?: number | null;
   serialNumber?: string | null;
   purchaseCost?: number | null;
   acquisitionDate?: Date | null;
@@ -155,6 +156,8 @@ type UserShape = {
   updatedAt: Date;
   department?: DepartmentShape | null;
   site?: SiteShape | null;
+  managerSiteIds?: unknown;
+  managerSites?: SiteShape[];
 };
 
 export function serializeDepartment(department: DepartmentShape) {
@@ -260,6 +263,10 @@ export function serializeProduct(product: ProductShape) {
 }
 
 export function serializeUser(user: UserShape) {
+  const managerSiteIds = Array.isArray(user.managerSiteIds)
+    ? user.managerSiteIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : [];
+
   return {
     _id: user.id,
     id: user.id,
@@ -278,6 +285,10 @@ export function serializeUser(user: UserShape) {
     updatedAt: user.updatedAt,
     department: user.department ? serializeDepartment(user.department) : null,
     site: user.site ? serializeSite(user.site) : null,
+    managerSiteIds,
+    managerSites: Array.isArray(user.managerSites)
+      ? user.managerSites.map((site) => serializeSite(site))
+      : [],
   };
 }
 
@@ -299,6 +310,7 @@ export function serializeAsset(asset: AssetShape) {
     id: asset.id,
     name: asset.name,
     assetTag: asset.assetTag,
+    quantity: asset.quantity ?? 0,
     serialNumber: asset.serialNumber || "",
     purchaseCost: asset.purchaseCost ?? null,
     acquisitionDate: asset.acquisitionDate,

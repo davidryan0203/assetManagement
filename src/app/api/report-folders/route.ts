@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 // POST create folder
 export async function POST(req: NextRequest) {
   const currentUser = getUserFromRequest(req);
-  if (!currentUser || currentUser.role === "staff") {
+  if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 

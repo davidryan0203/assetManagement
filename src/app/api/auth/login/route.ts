@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
     role: user.role,
     name: `${user.firstName} ${user.lastName}`.trim(),
     siteId: user.site?.id || null,
+    managerSiteIds: Array.isArray(user.managerSiteIds)
+      ? user.managerSiteIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [],
   });
 
   return NextResponse.json({

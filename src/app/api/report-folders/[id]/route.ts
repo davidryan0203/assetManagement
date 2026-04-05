@@ -10,7 +10,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const currentUser = getUserFromRequest(req);
-  if (!currentUser || currentUser.role === "staff") {
+  if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
@@ -34,7 +34,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const currentUser = getUserFromRequest(req);
-  if (!currentUser || currentUser.role === "staff") {
+  if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 

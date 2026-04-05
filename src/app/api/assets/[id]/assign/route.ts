@@ -13,7 +13,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const currentUser = getUserFromRequest(req);
-  if (!currentUser || currentUser.role === "staff") {
+  if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
@@ -40,14 +40,14 @@ export async function POST(
     // Auto-resolve site from the assigned user's site
     const userDoc = await prisma.user.findUnique({ where: { id: assignedTo }, select: { siteId: true } });
     if (userDoc?.siteId) {
-      if (currentUser.role === "manager" && currentUser.siteId && userDoc.siteId !== currentUser.siteId) {
+      if (!canAccessSiteRecord(currentUser, userDoc.siteId)) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
       resolvedSite = userDoc.siteId;
     }
   }
 
-  if (currentUser.role === "manager" && currentUser.siteId && resolvedSite && resolvedSite !== currentUser.siteId) {
+  if (resolvedSite && !canAccessSiteRecord(currentUser, resolvedSite)) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 

@@ -31,10 +31,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({ asset: serializeAsset(asset) });
 }
 
-// PUT update asset (admin & manager)
+// PUT update asset (admin only)
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const currentUser = getUserFromRequest(req);
-  if (!currentUser || currentUser.role === "staff") {
+  if (!currentUser || currentUser.role !== "admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
   const { id } = await params;
@@ -47,6 +47,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const data: Prisma.AssetUpdateInput = {
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.assetTag !== undefined ? { assetTag: String(body.assetTag).toUpperCase() } : {}),
+      ...(body.quantity !== undefined ? { quantity: Math.max(0, Number(body.quantity) || 0) } : {}),
       ...(body.serialNumber !== undefined ? { serialNumber: body.serialNumber } : {}),
       ...(body.purchaseCost !== undefined ? { purchaseCost: body.purchaseCost || null } : {}),
       ...(body.acquisitionDate !== undefined ? { acquisitionDate: body.acquisitionDate ? new Date(body.acquisitionDate) : null } : {}),

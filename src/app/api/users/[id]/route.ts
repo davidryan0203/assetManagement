@@ -5,6 +5,11 @@ import { getUserFromRequest } from "@backend/lib/jwt";
 import prisma from "@backend/lib/prisma";
 import { serializeUser } from "@backend/lib/mysqlSerializers";
 
+function normalizeManagerSiteIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
 // GET single user
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const currentUser = getUserFromRequest(req);
@@ -20,8 +25,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 
   if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
+  const managerSiteIds = normalizeManagerSiteIds(user.managerSiteIds);
+  const managerSites = managerSiteIds.length > 0
+    ? await prisma.site.findMany({
+        where: { id: { in: managerSiteIds } },
+        select: { id: true, name: true },
+      })
+    : [];
 
-  return NextResponse.json({ user: serializeUser(user) });
+  return NextResponse.json({ user: serializeUser({ ...user, managerSiteIds, managerSites }) });
 }
 
 // PUT update user (admin only, or own profile)
@@ -40,7 +52,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json();
   const { firstName, lastName, displayName, employeeId, description,
           email, role, department, site, isActive, password,
-          phone, mobile } = body;
+      phone, mobile, managerSiteIds } = body;
+
+    const normalizedManagerSiteIds = normalizeManagerSiteIds(managerSiteIds);
 
   const data: Prisma.UserUpdateInput = {};
   if (firstName) data.firstName = firstName;
@@ -52,10 +66,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (phone !== undefined) data.phone = phone;
   if (mobile !== undefined) data.mobile = mobile;
   if (isAdmin && role) data.role = role;
+  if (isAdmin && role !== undefined) {
+    if (role === "manager") {
+      data.managerSiteIds = normalizedManagerSiteIds;
+      data.site = normalizedManagerSiteIds[0]
+        ? { connect: { id: normalizedManagerSiteIds[0] } }
+        : { disconnect: true };
+    } else {
+      data.managerSiteIds = Prisma.JsonNull;
+    }
+  }
   if (isAdmin && department !== undefined) {
     data.department = department ? { connect: { id: department } } : { disconnect: true };
   }
-  if (isAdmin && site !== undefined) {
+  if (isAdmin && site !== undefined && role !== "manager") {
     data.site = site ? { connect: { id: site } } : { disconnect: true };
   }
   if (isAdmin && isActive !== undefined) data.isActive = isActive;
@@ -71,7 +95,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     });
 
-    return NextResponse.json({ message: "User updated", user: serializeUser(user) });
+    const resolvedManagerSiteIds = normalizeManagerSiteIds(user.managerSiteIds);
+    const managerSites = resolvedManagerSiteIds.length > 0
+      ? await prisma.site.findMany({
+          where: { id: { in: resolvedManagerSiteIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+    return NextResponse.json({
+      message: "User updated",
+      user: serializeUser({ ...user, managerSiteIds: resolvedManagerSiteIds, managerSites }),
+    });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2025") {

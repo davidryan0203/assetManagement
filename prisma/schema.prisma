@@ -49,6 +49,7 @@ model User {
   mobile      String?
   departmentId String?   @db.VarChar(191)
   siteId      String?    @db.VarChar(191)
+  managerSiteIds Json?
   isActive    Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -59,6 +60,7 @@ model User {
   assignedAssets Asset[]  @relation("AssetAssignedTo")
   reports     Report[]
   reportFolders ReportFolder[]
+  consumableIssues ConsumableIssueLog[] @relation("ConsumableIssuedBy")
 
   @@index([departmentId])
   @@index([siteId])
@@ -196,6 +198,7 @@ model Asset {
   acquisitionDate    DateTime?
   expiryDate         DateTime?
   warrantyExpiryDate DateTime?
+  quantity           Int        @default(0)
   barcodeQr          String?
   location           String?
   assetState         AssetState @default(InStore)
@@ -225,6 +228,7 @@ model Asset {
   department         Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   site               Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
   createdBy          User       @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  consumableIssues   ConsumableIssueLog[]
 
   @@index([productId])
   @@index([vendorId])
@@ -233,6 +237,24 @@ model Asset {
   @@index([siteId])
   @@index([createdById])
   @@map("assets")
+}
+
+model ConsumableIssueLog {
+  id           String   @id @default(cuid()) @db.VarChar(191)
+  consumableId String   @db.VarChar(191)
+  quantity     Int
+  issuedTo     String?
+  notes        String?
+  issuedById   String   @db.VarChar(191)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  consumable   Asset    @relation(fields: [consumableId], references: [id], onDelete: Restrict)
+  issuedBy     User     @relation("ConsumableIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
+
+  @@index([consumableId])
+  @@index([issuedById])
+  @@map("consumable_issue_logs")
 }
 
 model ReportFolder {

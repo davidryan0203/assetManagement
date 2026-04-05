@@ -21,5 +21,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "User not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ user: serializeUser(dbUser) });
+  const managerSiteIds = Array.isArray(dbUser.managerSiteIds)
+    ? dbUser.managerSiteIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : [];
+
+  const managerSites = managerSiteIds.length > 0
+    ? await prisma.site.findMany({
+        where: { id: { in: managerSiteIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+
+  return NextResponse.json({ user: serializeUser({ ...dbUser, managerSiteIds, managerSites }) });
 }

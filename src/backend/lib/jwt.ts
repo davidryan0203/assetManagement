@@ -9,6 +9,7 @@ export interface JWTPayload {
   role: string;
   name: string;
   siteId?: string | null;
+  managerSiteIds?: string[];
 }
 
 export function signToken(payload: JWTPayload): string {
