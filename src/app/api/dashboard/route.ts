@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@backend/lib/jwt";
 import prisma from "@backend/lib/prisma";
 import { serializeAsset } from "@backend/lib/mysqlSerializers";
+import { scopeAssetWhereToUser } from "@backend/lib/siteAccess";
 
 export async function GET(req: NextRequest) {
   const currentUser = getUserFromRequest(req);
@@ -16,16 +17,21 @@ export async function GET(req: NextRequest) {
     totalUsers,
     totalDepartments,
   ] = await Promise.all([
-    prisma.asset.count(),
-    prisma.asset.count({ where: { assetState: "InStore" } }),
-    prisma.asset.count({ where: { assetState: "Assigned" } }),
-    prisma.asset.count({ where: { assetState: "UnderRepair" } }),
-    prisma.asset.count({ where: { assetState: "Retired" } }),
-    prisma.user.count(),
-    prisma.department.count(),
+    prisma.asset.count({ where: scopeAssetWhereToUser({}, currentUser) }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "InStore" }, currentUser) }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "Assigned" }, currentUser) }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "UnderRepair" }, currentUser) }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "Retired" }, currentUser) }),
+    currentUser.role === "manager" && currentUser.siteId
+      ? prisma.user.count({ where: { siteId: currentUser.siteId } })
+      : prisma.user.count(),
+    currentUser.role === "manager" && currentUser.siteId
+      ? prisma.department.count({ where: { users: { some: { siteId: currentUser.siteId } } } })
+      : prisma.department.count(),
   ]);
 
   const recentAssetsDb = await prisma.asset.findMany({
+    where: scopeAssetWhereToUser({}, currentUser),
     include: {
       product: { include: { category: true } },
       department: true,

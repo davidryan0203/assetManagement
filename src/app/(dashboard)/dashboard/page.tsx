@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import api from "@backend/lib/api";
 import { FiBox, FiCheckCircle, FiTool, FiXCircle, FiUsers, FiBriefcase, FiClock } from "react-icons/fi";
 import Link from "next/link";
+import { useAuth } from "@frontend/context/AuthContext";
 
 interface Stats {
   totalAssets: number;
@@ -34,6 +35,7 @@ const statusClass: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const { isAdmin } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentAssets, setRecentAssets] = useState<RecentAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,28 +93,32 @@ export default function DashboardPage() {
             </div>
           </div>
         </Link>
-        <Link href="/dashboard/users" className="card hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center group-hover:bg-purple-100 transition-colors">
-              <FiUsers className="text-purple-600 text-2xl" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Manage Users</h3>
-              <p className="text-sm text-gray-500">Manage system users</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/dashboard/departments" className="card hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-              <FiBriefcase className="text-orange-600 text-2xl" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Departments</h3>
-              <p className="text-sm text-gray-500">Manage departments</p>
-            </div>
-          </div>
-        </Link>
+        {isAdmin && (
+          <>
+            <Link href="/dashboard/users" className="card hover:shadow-md transition-shadow cursor-pointer group">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center group-hover:bg-purple-100 transition-colors">
+                  <FiUsers className="text-purple-600 text-2xl" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Manage Users</h3>
+                  <p className="text-sm text-gray-500">Manage system users</p>
+                </div>
+              </div>
+            </Link>
+            <Link href="/dashboard/departments" className="card hover:shadow-md transition-shadow cursor-pointer group">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                  <FiBriefcase className="text-orange-600 text-2xl" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Departments</h3>
+                  <p className="text-sm text-gray-500">Manage departments</p>
+                </div>
+              </div>
+            </Link>
+          </>
+        )}
       </div>
 
       {/* Recent Assets */}

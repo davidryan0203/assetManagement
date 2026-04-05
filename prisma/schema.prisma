@@ -202,7 +202,7 @@ model Asset {
   assignedToId       String?    @db.VarChar(191)
   departmentId       String?    @db.VarChar(191)
   siteId             String?    @db.VarChar(191)
-  associatedToId     String?    @db.VarChar(191)
+  associatedToIds    Json?
   retainSite         Boolean    @default(false)
   stateComments      String?
   isNewDevice        Boolean    @default(true)
@@ -224,8 +224,6 @@ model Asset {
   assignedTo         User?      @relation("AssetAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   department         Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   site               Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  associatedTo       Asset?     @relation("AssetAssociation", fields: [associatedToId], references: [id], onDelete: SetNull)
-  associatedAssets   Asset[]    @relation("AssetAssociation")
   createdBy          User       @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([productId])
@@ -233,7 +231,6 @@ model Asset {
   @@index([assignedToId])
   @@index([departmentId])
   @@index([siteId])
-  @@index([associatedToId])
   @@index([createdById])
   @@map("assets")
 }

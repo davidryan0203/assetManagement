@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getUserFromRequest } from "@backend/lib/jwt";
 import prisma from "@backend/lib/prisma";
 import { serializeAsset, toPrismaAssetState } from "@backend/lib/mysqlSerializers";
+import { scopeAssetWhereToUser } from "@backend/lib/siteAccess";
 
 // GET all assets
 export async function GET(req: NextRequest) {
@@ -30,15 +31,16 @@ export async function GET(req: NextRequest) {
       : {}),
   };
 
+  const scopedWhere = scopeAssetWhereToUser(where, currentUser);
+
   const assets = await prisma.asset.findMany({
-    where,
+    where: scopedWhere,
     include: {
       product: { include: { category: true, vendor: true, productType: { include: { category: true } } } },
       vendor: true,
       department: true,
       site: true,
       assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-      associatedTo: { select: { id: true, name: true, assetTag: true } },
       createdBy: { select: { id: true, firstName: true, lastName: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -56,6 +58,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { name, assetTag, product } = body;
+  const associatedToIds = Array.isArray(body.associatedToIds)
+    ? body.associatedToIds.filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
+    : [];
 
   if (!name || !assetTag || !product) {
     return NextResponse.json({ message: "Name, asset tag, and product are required" }, { status: 400 });
@@ -93,9 +98,10 @@ export async function POST(req: NextRequest) {
       product: { connect: { id: body.product } },
       ...(body.vendor ? { vendor: { connect: { id: body.vendor } } } : {}),
       ...(body.department ? { department: { connect: { id: body.department } } } : {}),
-      ...(body.site ? { site: { connect: { id: body.site } } } : {}),
+      ...(currentUser.role === "manager" && currentUser.siteId
+        ? { site: { connect: { id: currentUser.siteId } } }
+        : body.site ? { site: { connect: { id: body.site } } } : {}),
       ...(body.assignedTo ? { assignedTo: { connect: { id: body.assignedTo } } } : {}),
-      ...(body.associatedTo ? { associatedTo: { connect: { id: body.associatedTo } } } : {}),
       createdBy: { connect: { id: currentUser.id } },
     },
     include: {
@@ -104,10 +110,13 @@ export async function POST(req: NextRequest) {
       department: true,
       site: true,
       assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-      associatedTo: { select: { id: true, name: true, assetTag: true } },
       createdBy: { select: { id: true, firstName: true, lastName: true } },
     },
   });
+
+  if (associatedToIds.length > 0) {
+    await prisma.$executeRaw`UPDATE assets SET associatedToIds = CAST(${JSON.stringify(associatedToIds)} AS JSON) WHERE id = ${asset.id}`;
+  }
 
   return NextResponse.json({ message: "Asset created", asset: serializeAsset(asset) }, { status: 201 });
 }

@@ -49,7 +49,7 @@ const SECTION_HEADER = ({ title }: { title: string }) => (
 );
 
 export default function UsersPage() {
-  const { user: me, isAdmin, isManager } = useAuth();
+  const { user: me, isAdmin } = useAuth();
   const router = useRouter();
 
   const [users, setUsers] = useState<User[]>([]);
@@ -65,8 +65,8 @@ export default function UsersPage() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!isManager) { router.replace("/dashboard"); }
-  }, [isManager, router]);
+    if (!isAdmin) { router.replace("/dashboard"); }
+  }, [isAdmin, router]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);

@@ -12,6 +12,7 @@ import {
   serializeUser,
   toPrismaAssetState,
 } from "@backend/lib/mysqlSerializers";
+import { scopeAssetWhereToUser } from "@backend/lib/siteAccess";
 
 type FilterRule = {
   field: string;
@@ -44,20 +45,22 @@ export async function GET(
 
   if (report.module === "Assets") {
     const assets = await prisma.asset.findMany({
-      where: where as Prisma.AssetWhereInput,
+      where: scopeAssetWhereToUser(where as Prisma.AssetWhereInput, currentUser),
       include: {
         product: { include: { category: true, vendor: true, productType: { include: { category: true } } } },
         vendor: true,
         department: true,
         site: true,
         assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-        associatedTo: { select: { id: true, name: true, assetTag: true } },
         createdBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
 
     const filtered = applyPostFilters(assets.map(serializeAsset), filters);
-    rows = filtered.map((a) => flattenAsset(a));
+    const associatedTagMap = new Map(
+      assets.map((asset) => [asset.id, asset.assetTag])
+    );
+    rows = filtered.map((a) => flattenAsset(a, associatedTagMap));
   } else if (report.module === "Sites") {
     const sites = await prisma.site.findMany({ where: where as Prisma.SiteWhereInput });
     const filtered = applyPostFilters(sites.map(serializeSite), filters);
@@ -282,7 +285,10 @@ function matchesFilter(val: string, operator: string, filterValue: string): bool
   }
 }
 
-function flattenAsset(a: Record<string, unknown>): Record<string, unknown> {
+function flattenAsset(
+  a: Record<string, unknown>,
+  associatedTagMap: Map<string, string>
+): Record<string, unknown> {
   const product = (a.product || {}) as Record<string, unknown>;
   const productCategory = (product.category || {}) as Record<string, unknown>;
   const productVendor = (product.vendor || {}) as Record<string, unknown>;
@@ -290,7 +296,12 @@ function flattenAsset(a: Record<string, unknown>): Record<string, unknown> {
   const department = (a.department || {}) as Record<string, unknown>;
   const site = (a.site || {}) as Record<string, unknown>;
   const assignedTo = (a.assignedTo || {}) as Record<string, unknown>;
-  const associatedTo = (a.associatedTo || {}) as Record<string, unknown>;
+  const associatedToIds = Array.isArray(a.associatedToIds)
+    ? a.associatedToIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const associatedToTags = associatedToIds
+    .map((id) => associatedTagMap.get(id) || id)
+    .join(", ");
   const createdBy = (a.createdBy || {}) as Record<string, unknown>;
 
   return {
@@ -326,7 +337,7 @@ function flattenAsset(a: Record<string, unknown>): Record<string, unknown> {
     "site.name": site.name ?? "",
     "assignedTo.name": assignedTo.name ?? "Not Assigned",
     "assignedTo.email": assignedTo.email ?? "",
-    "associatedTo.assetTag": associatedTo.assetTag ?? "",
+    "associatedTo.assetTag": associatedToTags,
     "createdBy.name": createdBy.name ?? "",
     createdAt: a.createdAt ? new Date(String(a.createdAt)).toLocaleDateString() : "",
   };

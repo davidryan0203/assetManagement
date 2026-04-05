@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     email: user.email,
     role: user.role,
     name: `${user.firstName} ${user.lastName}`.trim(),
+    siteId: user.site?.id || null,
   });
 
   return NextResponse.json({

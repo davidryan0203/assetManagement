@@ -16,6 +16,7 @@ interface User {
   name: string;
   email: string;
   role: "admin" | "manager" | "staff";
+  site?: { _id: string; name: string } | null;
   department?: { _id: string; name: string; code: string } | null;
 }
 

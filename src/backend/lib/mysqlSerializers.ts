@@ -135,7 +135,7 @@ type AssetShape = {
   department?: DepartmentShape | null;
   site?: SiteShape | null;
   assignedTo?: Pick<UserShape, "id" | "firstName" | "lastName" | "email"> | null;
-  associatedTo?: Pick<AssetShape, "id" | "name" | "assetTag"> | null;
+  associatedToIds?: unknown;
   createdBy?: Pick<UserShape, "id" | "firstName" | "lastName"> | null;
 };
 
@@ -333,14 +333,9 @@ export function serializeAsset(asset: AssetShape) {
           email: asset.assignedTo.email,
         }
       : null,
-    associatedTo: asset.associatedTo
-      ? {
-          _id: asset.associatedTo.id,
-          id: asset.associatedTo.id,
-          name: asset.associatedTo.name,
-          assetTag: asset.associatedTo.assetTag,
-        }
-      : null,
+    associatedToIds: Array.isArray(asset.associatedToIds)
+      ? asset.associatedToIds.filter((id): id is string => typeof id === "string")
+      : [],
     createdBy: asset.createdBy
       ? {
           _id: asset.createdBy.id,

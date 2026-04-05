@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getUserFromRequest } from "@backend/lib/jwt";
 import prisma from "@backend/lib/prisma";
 import { serializeAsset, toPrismaAssetState } from "@backend/lib/mysqlSerializers";
+import { canAccessSiteRecord } from "@backend/lib/siteAccess";
 
 // GET single asset
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,12 +19,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       department: true,
       site: true,
       assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-      associatedTo: { select: { id: true, name: true, assetTag: true } },
       createdBy: { select: { id: true, firstName: true, lastName: true } },
     },
   });
 
   if (!asset) return NextResponse.json({ message: "Asset not found" }, { status: 404 });
+  if (!canAccessSiteRecord(currentUser, asset.siteId)) {
+    return NextResponse.json({ message: "Asset not found" }, { status: 404 });
+  }
 
   return NextResponse.json({ asset: serializeAsset(asset) });
 }
@@ -36,6 +39,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const { id } = await params;
   const body = await req.json();
+  const associatedToIds = Array.isArray(body.associatedToIds)
+    ? body.associatedToIds.filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
+    : [];
 
   try {
     const data: Prisma.AssetUpdateInput = {
@@ -66,7 +72,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ...(body.department !== undefined ? (body.department ? { department: { connect: { id: body.department } } } : { department: { disconnect: true } }) : {}),
       ...(body.site !== undefined ? (body.site ? { site: { connect: { id: body.site } } } : { site: { disconnect: true } }) : {}),
       ...(body.assignedTo !== undefined ? (body.assignedTo ? { assignedTo: { connect: { id: body.assignedTo } } } : { assignedTo: { disconnect: true } }) : {}),
-      ...(body.associatedTo !== undefined ? (body.associatedTo ? { associatedTo: { connect: { id: body.associatedTo } } } : { associatedTo: { disconnect: true } }) : {}),
     };
 
     const asset = await prisma.asset.update({
@@ -78,10 +83,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         department: true,
         site: true,
         assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-        associatedTo: { select: { id: true, name: true, assetTag: true } },
         createdBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
+
+    if (body.associatedToIds !== undefined) {
+      await prisma.$executeRaw`UPDATE assets SET associatedToIds = CAST(${JSON.stringify(associatedToIds)} AS JSON) WHERE id = ${id}`;
+    }
+
+    if (!canAccessSiteRecord(currentUser, asset.siteId)) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
 
     return NextResponse.json({ message: "Asset updated", asset: serializeAsset(asset) });
   } catch (error) {
@@ -99,6 +111,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
   const { id } = await params;
+
+  const existing = await prisma.asset.findUnique({ where: { id }, select: { siteId: true } });
+  if (!existing) {
+    return NextResponse.json({ message: "Asset not found" }, { status: 404 });
+  }
+  if (!canAccessSiteRecord(currentUser, existing.siteId)) {
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+  }
 
   await prisma.asset.delete({ where: { id } }).catch((error: unknown) => {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {

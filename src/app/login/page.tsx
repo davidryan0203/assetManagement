@@ -52,7 +52,7 @@ export default function LoginPage() {
             <FiPackage className="text-primary-600 text-3xl" />
           </div>
           <h1 className="text-3xl font-bold text-white">Mamu Tshishkutamashutau Innu Education</h1>
-          <p className="text-primary-200 mt-1">Enterprise Asset Management</p>
+          <p className="text-primary-200 mt-1">Asset Management System</p>
         </div>
 
         {/* Card */}
@@ -111,14 +111,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
+          {/* <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
             <p className="text-xs text-blue-700 font-medium mb-1">Default Admin Credentials</p>
             <p className="text-xs text-blue-600">Email: admin@inventory.com</p>
             <p className="text-xs text-blue-600">Password: Admin@123</p>
             <p className="text-xs text-blue-500 mt-1">
               First time? Run <code className="bg-blue-100 px-1 rounded">POST /api/seed</code> to create admin
             </p>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

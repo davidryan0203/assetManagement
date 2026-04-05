@@ -38,7 +38,7 @@ interface Asset {
   assignedTo?: UserOption | null;
   department?: Department | null;
   site?: Site | null;
-  associatedTo?: Asset | null;
+  associatedToIds?: string[];
   retainSite: boolean;
   stateComments?: string;
   isNewDevice: boolean;
@@ -56,6 +56,7 @@ interface Asset {
 
 type SortDirection = "asc" | "desc";
 type AssetSortKey = "assetTag" | "name" | "product" | "category" | "vendor" | "state" | "assignedTo" | "site" | "serialNumber" | "createdAt";
+type AssetFilterKey = Exclude<AssetSortKey, "createdAt">;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ const emptyForm = {
   name: "", assetTag: "", product: "", serialNumber: "", vendor: "",
   purchaseCost: "", acquisitionDate: "", expiryDate: "", warrantyExpiryDate: "",
   barcodeQr: "", location: "",
-  assetState: "In Store", department: "", site: "", associatedTo: "",
+  assetState: "In Store", department: "", site: "", associatedToIds: [] as string[],
   assignedUser: "",
   retainSite: false, stateComments: "",
   isNewDevice: true, assetCheck: "", comment: "", comment2: "",
@@ -97,7 +98,7 @@ const emptyForm = {
 };
 
 const emptyAssign = {
-  associatedTo: "",
+  associatedToIds: [] as string[],
   assignedTo: "",
   department: "",
   site: "",
@@ -139,6 +140,18 @@ export default function AssetsPage() {
   const [search, setSearch] = useState("");
   const [filterState, setFilterState] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
+  const [activeColumnFilter, setActiveColumnFilter] = useState<AssetFilterKey | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<AssetFilterKey, string>>({
+    assetTag: "",
+    name: "",
+    product: "",
+    category: "",
+    vendor: "",
+    state: "",
+    assignedTo: "",
+    site: "",
+    serialNumber: "",
+  });
   const [sortKey, setSortKey] = useState<AssetSortKey>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [rowsPerPage, setRowsPerPage] = useState(20);
@@ -164,6 +177,15 @@ export default function AssetsPage() {
 
   const selectedProductObj = products.find((p) => p._id === form.product);
 
+  const setColumnFilter = (key: AssetFilterKey, value: string) => {
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const clearColumnFilter = (key: AssetFilterKey) => {
+    setColumnFilters((prev) => ({ ...prev, [key]: "" }));
+    setActiveColumnFilter((prev) => (prev === key ? null : prev));
+  };
+
   const handleSort = (key: AssetSortKey) => {
     if (sortKey === key) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -173,15 +195,38 @@ export default function AssetsPage() {
     setSortDirection("asc");
   };
 
+  const filteredAssets = useMemo(() => {
+    return assets.filter((asset) => {
+      const matches = (key: AssetFilterKey) => {
+        const filterValue = columnFilters[key].trim().toLowerCase();
+        if (!filterValue) return true;
+        const value = getAssetFilterValue(asset, key).toLowerCase();
+        return value.includes(filterValue);
+      };
+
+      return (
+        matches("assetTag") &&
+        matches("name") &&
+        matches("product") &&
+        matches("category") &&
+        matches("vendor") &&
+        matches("state") &&
+        matches("assignedTo") &&
+        matches("site") &&
+        matches("serialNumber")
+      );
+    });
+  }, [assets, columnFilters]);
+
   const sortedAssets = useMemo(() => {
-    return [...assets].sort((a, b) => {
+    return [...filteredAssets].sort((a, b) => {
       const left = assetSortValue(a, sortKey);
       const right = assetSortValue(b, sortKey);
       if (left === right) return 0;
       if (sortDirection === "asc") return left > right ? 1 : -1;
       return left > right ? -1 : 1;
     });
-  }, [assets, sortKey, sortDirection]);
+  }, [filteredAssets, sortKey, sortDirection]);
 
   const totalPages = Math.max(1, Math.ceil(sortedAssets.length / rowsPerPage));
   const paginatedAssets = sortedAssets.slice((tablePage - 1) * rowsPerPage, tablePage * rowsPerPage);
@@ -212,7 +257,23 @@ export default function AssetsPage() {
 
   useEffect(() => {
     setTablePage(1);
-  }, [search, filterState, filterCategory, rowsPerPage, sortKey, sortDirection]);
+  }, [
+    search,
+    filterState,
+    filterCategory,
+    rowsPerPage,
+    sortKey,
+    sortDirection,
+    columnFilters.assetTag,
+    columnFilters.name,
+    columnFilters.product,
+    columnFilters.category,
+    columnFilters.vendor,
+    columnFilters.state,
+    columnFilters.assignedTo,
+    columnFilters.site,
+    columnFilters.serialNumber,
+  ]);
 
   useEffect(() => {
     if (tablePage > totalPages) setTablePage(totalPages);
@@ -247,7 +308,9 @@ export default function AssetsPage() {
   // ── Open assign modal pre-filled from current asset state
   const openAssign = (asset: Asset) => {
     setAssignForm({
-      associatedTo: (asset.associatedTo as Asset | null)?._id || "",
+      associatedToIds: Array.isArray(asset.associatedToIds)
+        ? asset.associatedToIds.filter((id): id is string => typeof id === "string")
+        : [],
       assignedTo: asset.assignedTo?._id || "",
       department: asset.department?._id || "",
       site: asset.site?._id || "",
@@ -296,7 +359,7 @@ export default function AssetsPage() {
       const payload = {
         assignedTo: assignForm.assignedTo || null,
         department: assignForm.department || null,
-        associatedTo: assignForm.associatedTo || null,
+        associatedToIds: assignForm.associatedToIds,
         site: assignForm.retainSite && assignForm.assignedTo ? null : assignForm.site || null,
         retainSite: assignForm.retainSite,
         stateComments: assignForm.stateComments,
@@ -337,7 +400,9 @@ export default function AssetsPage() {
       assetState: asset.assetState,
       department: asset.department?._id || "",
       site: asset.site?._id || "",
-      associatedTo: (asset.associatedTo as Asset | null)?._id || "",
+      associatedToIds: Array.isArray(asset.associatedToIds)
+        ? asset.associatedToIds.filter((id): id is string => typeof id === "string")
+        : [],
       assignedUser: asset.assignedTo?._id || "",
       retainSite: asset.retainSite,
       stateComments: asset.stateComments || "",
@@ -369,7 +434,7 @@ export default function AssetsPage() {
         vendor: form.vendor || null,
         department: form.department || null,
         site: form.site || null,
-        associatedTo: form.associatedTo || null,
+        associatedToIds: form.associatedToIds,
         assignedTo: form.assetState === "Assigned" ? (form.assignedUser || null) : null,
         acquisitionDate: form.acquisitionDate || null,
         expiryDate: form.expiryDate || null,
@@ -419,6 +484,9 @@ export default function AssetsPage() {
   if (selectedAsset) {
     const a = selectedAsset;
     const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString() : "—";
+    const associatedByIds = allAssets
+      .filter((asset) => asset._id !== a._id && Array.isArray(asset.associatedToIds) && asset.associatedToIds.includes(a._id))
+      .map((asset) => asset._id);
     return (
       <div className="space-y-4">
         {/* Top bar */}
@@ -497,7 +565,14 @@ export default function AssetsPage() {
                 </span>
               } />
               <DetailRow label="User" value={a.assignedTo?.name} />
-              <DetailRow label="Associated to Asset" value={(a.associatedTo as Asset | null)?.assetTag} />
+              <DetailRow
+                label="Associated to Asset"
+                value={renderAssociatedAssetChips(a.associatedToIds || [], allAssets)}
+              />
+              <DetailRow
+                label="Associated By Assets"
+                value={renderAssociatedAssetChips(associatedByIds, allAssets)}
+              />
               <DetailRow label="Department" value={a.department?.name} />
               <DetailRow label="Site" value={a.site?.name} />
               <DetailRow label="Retain Associated asset/User/Department's site" value={a.retainSite ? "Yes" : "No"} />
@@ -547,12 +622,12 @@ export default function AssetsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Associated To</label>
-              <SearchableSelect
-                options={allAssets.filter((x) => x._id !== a._id).map((x) => ({ value: x._id, label: `${x.assetTag} — ${x.name}` }))}
-                value={assignForm.associatedTo}
-                onChange={(v) => saf("associatedTo", v)}
-                placeholder="Select asset to associate"
-                noneLabel="— None —"
+              <AssetAssociationMultiSelect
+                currentAssetId={a._id}
+                assets={allAssets}
+                value={assignForm.associatedToIds}
+                onChange={(ids) => saf("associatedToIds", ids)}
+                placeholder="Search asset tag or product..."
               />
             </div>
 
@@ -658,7 +733,7 @@ export default function AssetsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Asset Management</h2>
-          <p className="text-sm text-gray-500">{assets.length} assets</p>
+          <p className="text-sm text-gray-500">{sortedAssets.length} assets</p>
         </div>
         {isManager && (
           <button onClick={openCreate} className="btn-primary flex items-center gap-2">
@@ -710,70 +785,173 @@ export default function AssetsPage() {
           <div className="flex items-center justify-center h-48">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
           </div>
-        ) : assets.length === 0 ? (
+        ) : sortedAssets.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <FiBox className="text-5xl mx-auto mb-3" />
             <p className="font-medium">No assets found</p>
-            {isManager && <p className="text-sm mt-1">Click &quot;Add Asset&quot; to get started</p>}
+            {assets.length > 0 ? (
+              <p className="text-sm mt-1">Try clearing one of the column filters</p>
+            ) : (
+              isManager && <p className="text-sm mt-1">Click &quot;Add Asset&quot; to get started</p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("assetTag")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Asset Tag</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "assetTag" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Asset Tag"
+                      sortKey="assetTag"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.assetTag}
+                      placeholder="Filter asset tag..."
+                      suggestions={getAssetColumnSuggestions(assets, "assetTag")}
+                      onActivate={() => setActiveColumnFilter("assetTag")}
+                      onChange={(value) => setColumnFilter("assetTag", value)}
+                      onClear={() => clearColumnFilter("assetTag")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("name")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Name</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "name" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Name"
+                      sortKey="name"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.name}
+                      placeholder="Filter name..."
+                      suggestions={getAssetColumnSuggestions(assets, "name")}
+                      onActivate={() => setActiveColumnFilter("name")}
+                      onChange={(value) => setColumnFilter("name", value)}
+                      onClear={() => clearColumnFilter("name")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("product")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Product</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "product" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Product"
+                      sortKey="product"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.product}
+                      placeholder="Filter product..."
+                      suggestions={getAssetColumnSuggestions(assets, "product")}
+                      onActivate={() => setActiveColumnFilter("product")}
+                      onChange={(value) => setColumnFilter("product", value)}
+                      onClear={() => clearColumnFilter("product")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("category")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Category</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "category" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Category"
+                      sortKey="category"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.category}
+                      placeholder="Filter category..."
+                      suggestions={getAssetColumnSuggestions(assets, "category")}
+                      onActivate={() => setActiveColumnFilter("category")}
+                      onChange={(value) => setColumnFilter("category", value)}
+                      onClear={() => clearColumnFilter("category")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("vendor")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Vendor</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "vendor" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Vendor"
+                      sortKey="vendor"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.vendor}
+                      placeholder="Filter vendor..."
+                      suggestions={getAssetColumnSuggestions(assets, "vendor")}
+                      onActivate={() => setActiveColumnFilter("vendor")}
+                      onChange={(value) => setColumnFilter("vendor", value)}
+                      onClear={() => clearColumnFilter("vendor")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("state")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>State</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "state" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="State"
+                      sortKey="state"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.state}
+                      placeholder="Filter state..."
+                      suggestions={ASSET_STATES}
+                      onActivate={() => setActiveColumnFilter("state")}
+                      onChange={(value) => setColumnFilter("state", value)}
+                      onClear={() => clearColumnFilter("state")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("assignedTo")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Assigned To</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "assignedTo" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Assigned To"
+                      sortKey="assignedTo"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.assignedTo}
+                      placeholder="Filter assignee..."
+                      suggestions={getAssetColumnSuggestions(assets, "assignedTo")}
+                      onActivate={() => setActiveColumnFilter("assignedTo")}
+                      onChange={(value) => setColumnFilter("assignedTo", value)}
+                      onClear={() => clearColumnFilter("assignedTo")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("site")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Site</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "site" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Site"
+                      sortKey="site"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.site}
+                      placeholder="Filter site..."
+                      suggestions={getAssetColumnSuggestions(assets, "site")}
+                      onActivate={() => setActiveColumnFilter("site")}
+                      onChange={(value) => setColumnFilter("site", value)}
+                      onClear={() => clearColumnFilter("site")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
-                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium">
-                    <button type="button" onClick={() => handleSort("serialNumber")} className="w-full inline-flex items-center justify-between gap-2 hover:text-gray-700">
-                      <span>Serial #</span>
-                      <FiChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${sortKey === "serialNumber" ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
-                    </button>
+                  <th className="text-left py-3.5 px-4 text-gray-500 font-medium align-top">
+                    <ColumnHeader
+                      label="Serial #"
+                      sortKey="serialNumber"
+                      currentSortKey={sortKey}
+                      sortDirection={sortDirection}
+                      activeFilter={activeColumnFilter}
+                      filterValue={columnFilters.serialNumber}
+                      placeholder="Filter serial #..."
+                      suggestions={getAssetColumnSuggestions(assets, "serialNumber")}
+                      onActivate={() => setActiveColumnFilter("serialNumber")}
+                      onChange={(value) => setColumnFilter("serialNumber", value)}
+                      onClear={() => clearColumnFilter("serialNumber")}
+                      onClose={() => setActiveColumnFilter(null)}
+                      onSort={handleSort}
+                    />
                   </th>
                   {isManager && <th className="text-right py-3.5 px-4 text-gray-500 font-medium">Actions</th>}
                 </tr>
@@ -845,7 +1023,7 @@ export default function AssetsPage() {
 
       {/* Create Modal */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)}
-        title="New Asset" size="xl">
+        title={editAsset ? `Edit ${editAsset.assetTag}` : "New Asset"} size="xl">
         <AssetFormBody
           form={form} sf={sf} products={products} vendors={vendors}
           departments={departments} sites={sites} allAssets={allAssets}
@@ -854,7 +1032,7 @@ export default function AssetsPage() {
         <div className="flex gap-3 mt-6">
           <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
-            {saving ? "Saving..." : "Create Asset"}
+            {saving ? "Saving..." : editAsset ? "Update Asset" : "Create Asset"}
           </button>
         </div>
       </Modal>
@@ -880,6 +1058,284 @@ function assetSortValue(asset: Asset, key: AssetSortKey) {
   return new Date(asset.createdAt).getTime().toString().padStart(20, "0");
 }
 
+function getAssetFilterValue(asset: Asset, key: AssetFilterKey) {
+  if (key === "assetTag") return asset.assetTag || "";
+  if (key === "name") return asset.name || "";
+  if (key === "product") return asset.product?.name || "";
+  if (key === "category") return asset.product?.category?.name || "";
+  if (key === "vendor") return asset.vendor?.name || asset.product?.vendor?.name || "";
+  if (key === "state") return asset.assetState || "";
+  if (key === "assignedTo") return asset.assignedTo?.name || "";
+  if (key === "site") return asset.site?.name || "";
+  if (key === "serialNumber") return asset.serialNumber || "";
+  return "";
+}
+
+function getAssetColumnSuggestions(assets: Asset[], key: AssetFilterKey) {
+  const values = assets
+    .map((asset) => getAssetFilterValue(asset, key).trim())
+    .filter(Boolean);
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+}
+
+function ColumnHeader({
+  label,
+  sortKey,
+  currentSortKey,
+  sortDirection,
+  activeFilter,
+  filterValue,
+  placeholder,
+  suggestions,
+  onActivate,
+  onChange,
+  onClear,
+  onClose,
+  onSort,
+}: {
+  label: string;
+  sortKey: AssetSortKey;
+  currentSortKey: AssetSortKey;
+  sortDirection: SortDirection;
+  activeFilter: AssetFilterKey | null;
+  filterValue: string;
+  placeholder: string;
+  suggestions: string[];
+  onActivate: () => void;
+  onChange: (value: string) => void;
+  onClear: () => void;
+  onClose: () => void;
+  onSort: (key: AssetSortKey) => void;
+}) {
+  const isActive = activeFilter === sortKey;
+  const filterId = `asset-filter-${sortKey}`;
+
+  return (
+    <div className="w-full flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        {isActive ? (
+          <div className="relative">
+            <input
+              autoFocus
+              list={suggestions.length > 0 ? filterId : undefined}
+              value={filterValue}
+              onChange={(e) => onChange(e.target.value)}
+              onBlur={onClose}
+              placeholder={placeholder}
+              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 shadow-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+            />
+            {suggestions.length > 0 && (
+              <datalist id={filterId}>
+                {suggestions.map((suggestion) => (
+                  <option key={suggestion} value={suggestion} />
+                ))}
+              </datalist>
+            )}
+            {filterValue && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={onClear}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600"
+                aria-label={`Clear ${label} filter`}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onActivate}
+            className="w-full text-left hover:text-gray-700"
+            title={`Filter ${label}`}
+          >
+            {label}
+          </button>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="shrink-0 mt-0.5 text-gray-400 hover:text-gray-700"
+        aria-label={`Sort ${label}`}
+        title={`Sort ${label}`}
+      >
+        <FiChevronDown className={`w-3.5 h-3.5 transition-transform ${currentSortKey === sortKey ? (sortDirection === "asc" ? "-rotate-180 text-gray-700" : "text-gray-700") : "opacity-40"}`} />
+      </button>
+    </div>
+  );
+}
+
+function getAssociatedAssetLabel(asset: Asset) {
+  const productLabel = asset.product?.name || asset.name || "Unknown Product";
+  return `${asset.assetTag} (${productLabel})`;
+}
+
+function renderAssociatedAssetChips(ids: string[], assets: Asset[]) {
+  if (!ids.length) return "—";
+  return (
+    <div className="flex flex-wrap gap-2">
+      {ids.map((id) => {
+        const asset = assets.find((item) => item._id === id);
+        return (
+          <span key={id} className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
+            {asset ? getAssociatedAssetLabel(asset) : id}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function AssetAssociationMultiSelect({
+  assets,
+  value,
+  onChange,
+  currentAssetId,
+  placeholder,
+}: {
+  assets: Asset[];
+  value: string[];
+  onChange: (ids: string[]) => void;
+  currentAssetId?: string;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const options = assets
+    .filter((asset) => asset._id !== currentAssetId)
+    .map((asset) => ({ value: asset._id, label: getAssociatedAssetLabel(asset) }));
+
+  const selectedAssets = value
+    .map((id) => assets.find((asset) => asset._id === id))
+    .filter((asset): asset is Asset => !!asset);
+
+  const filteredOptions = options.filter((option) =>
+    option.label.toLowerCase().includes(query.toLowerCase())
+  );
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 25);
+    } else {
+      setQuery("");
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const handleOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
+
+  const toggleId = (id: string) => {
+    if (value.includes(id)) {
+      onChange(value.filter((item) => item !== id));
+      return;
+    }
+    onChange([...value, id]);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((prev) => !prev);
+          }
+        }}
+        className="input-field min-h-[42px] w-full flex flex-wrap items-center gap-2 text-left"
+      >
+        {selectedAssets.length > 0 ? (
+          selectedAssets.map((asset) => (
+            <span key={asset._id} className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700">
+              {getAssociatedAssetLabel(asset)}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleId(asset._id);
+                }}
+                className="text-primary-500 hover:text-primary-700"
+                aria-label={`Remove ${asset.assetTag}`}
+              >
+                ×
+              </button>
+            </span>
+          ))
+        ) : (
+          <span className="text-gray-400">{placeholder}</span>
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2">
+            <FiSearch className="text-gray-400 text-sm shrink-0" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by asset tag or product..."
+              className="flex-1 bg-transparent text-sm outline-none text-gray-700 placeholder-gray-400"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery("")} className="text-gray-400 hover:text-gray-600">×</button>
+            )}
+          </div>
+
+          <div className="max-h-60 overflow-y-auto py-1">
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-gray-400 text-center">No matching assets</div>
+            ) : (
+              filteredOptions.map((option) => {
+                const selected = value.includes(option.value);
+                const asset = assets.find((item) => item._id === option.value);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => toggleId(option.value)}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-primary-50 ${selected ? "bg-primary-50 text-primary-700" : "text-gray-700"}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        readOnly
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600"
+                      />
+                      <div className="min-w-0">
+                        <div className="font-medium">{asset ? getAssociatedAssetLabel(asset) : option.label}</div>
+                        <div className="text-xs text-gray-500">{asset?.name || ""}</div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Extracted form body (shared between create and edit modals) ──────────────
 
 function AssetFormBody({
@@ -897,7 +1353,7 @@ function AssetFormBody({
   users: UserOption[];
 }) {
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
         <input className="input-field" value={form.name} onChange={(e) => sf("name", e.target.value)} placeholder="e.g. F-0001" />
@@ -966,10 +1422,13 @@ function AssetFormBody({
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Associated To</label>
-        <SearchableSelect
-          options={allAssets.filter((a) => a._id !== editAsset?._id).map((a) => ({ value: a._id, label: `${a.assetTag} — ${a.name}` }))}
-          value={form.associatedTo} onChange={(v) => sf("associatedTo", v)}
-          placeholder="Select asset to associate" noneLabel="— None —" />
+        <AssetAssociationMultiSelect
+          currentAssetId={editAsset?._id}
+          assets={allAssets}
+          value={form.associatedToIds}
+          onChange={(ids) => sf("associatedToIds", ids)}
+          placeholder="Search asset tag or product..."
+        />
       </div>
 
       {/* Conditional assignment fields — only show when state is Assigned */}
