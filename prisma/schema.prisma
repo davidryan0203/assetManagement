@@ -22,6 +22,7 @@ enum AssetState {
   InStore     @map("In Store")
   Assigned
   UnderRepair @map("Under Repair")
+  Damage
   Retired
   Disposed
   Lost

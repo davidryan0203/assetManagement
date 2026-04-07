@@ -16,7 +16,7 @@ import {
 
 interface Category { _id: string; name: string; }
 interface Vendor { _id: string; name: string; }
-interface Product { _id: string; name: string; sku?: string; category: Category; vendor?: Vendor | null; }
+interface Product { _id: string; name: string; sku?: string; category: Category; vendor?: Vendor | null; productType?: { type?: string } | null; }
 interface Department { _id: string; name: string; code: string; }
 interface Site { _id: string; name: string; }
 interface UserOption { _id: string; name: string; email: string; site?: Site | null; department?: Department | null; }
@@ -66,12 +66,13 @@ const SECTION = ({ title }: { title: string }) => (
   </div>
 );
 
-const ASSET_STATES = ["In Store", "Assigned", "Under Repair", "Retired", "Disposed", "Lost", "Missing"];
+const ASSET_STATES = ["In Store", "Assigned", "Under Repair", "Damage", "Retired", "Disposed", "Lost", "Missing"];
 
 const stateClass: Record<string, string> = {
   "In Store": "bg-blue-100 text-blue-700",
   "Assigned": "bg-green-100 text-green-700",
   "Under Repair": "bg-yellow-100 text-yellow-700",
+  "Damage": "bg-rose-100 text-rose-700",
   "Retired": "bg-gray-100 text-gray-600",
   "Disposed": "bg-red-100 text-red-600",
   "Lost": "bg-orange-100 text-orange-700",
@@ -238,6 +239,7 @@ export default function AssetsPage() {
     setLoading(true);
     try {
       const params: Record<string, string> = {};
+      params.kind = "Asset";
       if (search) params.search = search;
       if (filterState) params.assetState = filterState;
       if (filterCategory) params.category = filterCategory;
@@ -286,12 +288,12 @@ export default function AssetsPage() {
       api.get("/products"),
       api.get("/departments"),
       api.get("/sites"),
-      api.get("/assets"),
+      api.get("/assets", { params: { kind: "Asset" } }),
       api.get("/users").catch(() => ({ data: { users: [] } })),
     ]).then(([catRes, venRes, prodRes, deptRes, siteRes, assetRes, userRes]) => {
       setCategories(catRes.data.categories);
       setVendors(venRes.data.vendors);
-      setProducts(prodRes.data.products);
+      setProducts((prodRes.data.products || []).filter((product: Product) => product.productType?.type === "Asset"));
       setDepartments(deptRes.data.departments);
       setSites(siteRes.data.sites);
       setAllAssets(assetRes.data.assets);

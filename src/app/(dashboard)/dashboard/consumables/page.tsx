@@ -67,12 +67,13 @@ const SECTION = ({ title }: { title: string }) => (
   </div>
 );
 
-const ASSET_STATES = ["In Store", "Assigned", "Under Repair", "Retired", "Disposed", "Lost", "Missing"];
+const ASSET_STATES = ["In Store", "Assigned", "Under Repair", "Damage", "Retired", "Disposed", "Lost", "Missing"];
 
 const stateClass: Record<string, string> = {
   "In Store": "bg-blue-100 text-blue-700",
   "Assigned": "bg-green-100 text-green-700",
   "Under Repair": "bg-yellow-100 text-yellow-700",
+  "Damage": "bg-rose-100 text-rose-700",
   "Retired": "bg-gray-100 text-gray-600",
   "Disposed": "bg-red-100 text-red-600",
   "Lost": "bg-orange-100 text-orange-700",
