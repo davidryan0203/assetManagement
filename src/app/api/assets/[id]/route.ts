@@ -39,6 +39,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const { id } = await params;
   const body = await req.json();
+  const existingAsset = await prisma.asset.findUnique({
+    where: { id },
+    select: { id: true, assetState: true },
+  });
+
+  if (!existingAsset) {
+    return NextResponse.json({ message: "Asset not found" }, { status: 404 });
+  }
+
+  const requestedState = body.assetState ? toPrismaAssetState(body.assetState) : null;
+  if (requestedState === "Disposed" && existingAsset.assetState !== "Disposed") {
+    return NextResponse.json(
+      { message: "This item needs approval before being marked as disposed" },
+      { status: 400 }
+    );
+  }
+
   const associatedToIds = Array.isArray(body.associatedToIds)
     ? body.associatedToIds.filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
     : [];

@@ -129,6 +129,8 @@ type AssetShape = {
   devicePurchase?: string | null;
   lastSeen?: Date | null;
   numAuthDevices?: number | null;
+  disposalApprovalPending?: boolean;
+  disposalApprovalRequestedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
   product?: ProductShape | null;
@@ -331,6 +333,8 @@ export function serializeAsset(asset: AssetShape) {
     devicePurchase: asset.devicePurchase || "",
     lastSeen: asset.lastSeen,
     numAuthDevices: asset.numAuthDevices ?? null,
+    disposalApprovalPending: asset.disposalApprovalPending ?? false,
+    disposalApprovalRequestedAt: asset.disposalApprovalRequestedAt ?? null,
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
     product: asset.product ? serializeProduct(asset.product) : null,

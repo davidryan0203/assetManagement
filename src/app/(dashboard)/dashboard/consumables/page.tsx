@@ -9,7 +9,7 @@ import ConfirmDialog from "@frontend/components/ui/ConfirmDialog";
 import SearchableSelect from "@frontend/components/ui/SearchableSelect";
 import {
   FiPlus, FiEdit2, FiTrash2, FiSearch, FiBox,
-  FiChevronDown, FiUserCheck, FiArrowLeft,
+  FiChevronDown, FiUserCheck, FiArrowLeft, FiSend, FiClipboard,
 } from "react-icons/fi";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -53,6 +53,15 @@ interface Asset {
   lastSeen?: string;
   numAuthDevices?: number;
   createdAt: string;
+}
+
+interface IssueLog {
+  _id: string;
+  quantity: number;
+  issuedTo?: string;
+  notes?: string;
+  createdAt: string;
+  issuedBy?: { _id: string; name: string; email: string };
 }
 
 type SortDirection = "asc" | "desc";
@@ -106,6 +115,13 @@ const emptyAssign = {
   site: "",
   retainSite: true,
   stateComments: "",
+};
+
+const emptyIssueForm = {
+  consumableId: "",
+  quantity: "1",
+  issuedTo: "",
+  notes: "",
 };
 
 // ─── DateInput ────────────────────────────────────────────────────────────────
@@ -175,6 +191,15 @@ export default function ConsumablesPage() {
   const [showAssign, setShowAssign] = useState(false);
   const [assignForm, setAssignForm] = useState({ ...emptyAssign });
   const [assigning, setAssigning] = useState(false);
+
+  // Issue / history modals
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [issueForm, setIssueForm] = useState({ ...emptyIssueForm });
+  const [issuing, setIssuing] = useState(false);
+  const [historyLogs, setHistoryLogs] = useState<IssueLog[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyAsset, setHistoryAsset] = useState<Asset | null>(null);
 
   const consumableTypeOptions = useMemo(
     () => productTypes
@@ -495,6 +520,59 @@ export default function ConsumablesPage() {
     } finally { setDeleting(false); }
   };
 
+  const openIssue = (asset: Asset) => {
+    setIssueForm({ ...emptyIssueForm, consumableId: asset._id });
+    setShowIssueModal(true);
+  };
+
+  const openHistory = async (asset: Asset) => {
+    setHistoryAsset(asset);
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    try {
+      const res = await api.get("/consumable-issues", { params: { consumableId: asset._id } });
+      setHistoryLogs(res.data.logs || []);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Failed to load issue history");
+      setHistoryLogs([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleIssue = async () => {
+    const quantity = Number(issueForm.quantity);
+    if (!issueForm.consumableId || !Number.isFinite(quantity) || quantity <= 0) {
+      toast.error("Select consumable and valid quantity");
+      return;
+    }
+
+    setIssuing(true);
+    try {
+      const res = await api.post("/consumable-issues", {
+        consumableId: issueForm.consumableId,
+        quantity,
+        issuedTo: issueForm.issuedTo,
+        notes: issueForm.notes,
+      });
+      toast.success(`Issued successfully. Remaining: ${res.data.remainingQuantity}`);
+      setIssueForm({ ...emptyIssueForm });
+      setShowIssueModal(false);
+      fetchAssets();
+      if (selectedAsset?._id === issueForm.consumableId) {
+        const latest = await api.get("/assets", { params: { kind: "Consumable" } });
+        const updated = (latest.data.assets || []).find((a: Asset) => a._id === issueForm.consumableId);
+        if (updated) setSelectedAsset(updated);
+      }
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Failed to issue consumable");
+    } finally {
+      setIssuing(false);
+    }
+  };
+
   // ── Resolved site to display in assign modal
   const resolvedSiteForDisplay = (() => {
     if (assignForm.retainSite && assignForm.assignedTo) {
@@ -530,6 +608,16 @@ export default function ConsumablesPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => openHistory(a)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50">
+              <FiClipboard className="w-4 h-4" /> History
+            </button>
+            {isAdmin && (
+              <button onClick={() => openIssue(a)}
+                className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700">
+                <FiSend className="w-4 h-4" /> Issue
+              </button>
+            )}
             {isAdmin && (
               <button onClick={() => openAssign(a)}
                 className="btn-primary flex items-center gap-2">
@@ -623,6 +711,7 @@ export default function ConsumablesPage() {
             users={users}
             consumableTypeOptions={consumableTypeOptions}
             consumableProductOptions={consumableProductOptions}
+            isEdit={true}
           />
           <div className="flex gap-3 mt-6">
             <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -727,6 +816,24 @@ export default function ConsumablesPage() {
           onConfirm={handleDelete} title="Delete Consumable"
           message="Are you sure you want to delete this consumable? This action cannot be undone."
           loading={deleting} />
+
+        <IssueModal
+          isOpen={showIssueModal}
+          onClose={() => setShowIssueModal(false)}
+          issueForm={issueForm}
+          setIssueForm={setIssueForm}
+          assets={assets}
+          issuing={issuing}
+          onIssue={handleIssue}
+        />
+
+        <HistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          logs={historyLogs}
+          loading={historyLoading}
+          asset={historyAsset}
+        />
       </div>
     );
   }
@@ -942,7 +1049,7 @@ export default function ConsumablesPage() {
                       onSort={handleSort}
                     />
                   </th>
-                  {isAdmin && <th className="text-right py-3.5 px-4 text-gray-500 font-medium">Actions</th>}
+                  <th className="text-right py-3.5 px-4 text-gray-500 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -963,22 +1070,38 @@ export default function ConsumablesPage() {
                     <td className="py-3.5 px-4 text-gray-600">{asset.assignedTo?.name || "—"}</td>
                     <td className="py-3.5 px-4 text-gray-600">{asset.site?.name || "—"}</td>
                     <td className="py-3.5 px-4 text-gray-500 font-mono text-xs">{asset.serialNumber || "—"}</td>
-                    {isAdmin && (
-                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
+                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openHistory(asset)}
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          <FiClipboard className="h-3.5 w-3.5" />
+                          History
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => openIssue(asset)}
+                            className="inline-flex items-center gap-1 rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-200"
+                          >
+                            <FiSend className="h-3.5 w-3.5" />
+                            Issue
+                          </button>
+                        )}
+                        {isAdmin && (
                           <button onClick={() => openEdit(asset)}
                             className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
                             <FiEdit2 />
                           </button>
-                          {isAdmin && (
-                            <button onClick={() => setDeleteId(asset._id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                              <FiTrash2 />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
+                        )}
+                        {isAdmin && (
+                          <button onClick={() => setDeleteId(asset._id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <FiTrash2 />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1019,6 +1142,7 @@ export default function ConsumablesPage() {
           users={users}
           consumableTypeOptions={consumableTypeOptions}
           consumableProductOptions={consumableProductOptions}
+          isEdit={!!editAsset}
         />
         <div className="flex gap-3 mt-6">
           <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -1032,6 +1156,24 @@ export default function ConsumablesPage() {
         onConfirm={handleDelete} title="Delete Consumable"
         message="Are you sure you want to delete this consumable? This action cannot be undone."
         loading={deleting} />
+
+      <IssueModal
+        isOpen={showIssueModal}
+        onClose={() => setShowIssueModal(false)}
+        issueForm={issueForm}
+        setIssueForm={setIssueForm}
+        assets={assets}
+        issuing={issuing}
+        onIssue={handleIssue}
+      />
+
+      <HistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        logs={historyLogs}
+        loading={historyLoading}
+        asset={historyAsset}
+      />
     </div>
   );
 }
@@ -1157,10 +1299,135 @@ function ColumnHeader({
   );
 }
 
+function IssueModal({
+  isOpen,
+  onClose,
+  issueForm,
+  setIssueForm,
+  assets,
+  issuing,
+  onIssue,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  issueForm: typeof emptyIssueForm;
+  setIssueForm: React.Dispatch<React.SetStateAction<typeof emptyIssueForm>>;
+  assets: Asset[];
+  issuing: boolean;
+  onIssue: () => void;
+}) {
+  const selectedConsumable = assets.find((asset) => asset._id === issueForm.consumableId);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Issue Consumable" size="md">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Consumable *</label>
+          <SearchableSelect
+            allowNone={false}
+            options={assets.map((asset) => ({ value: asset._id, label: `${asset.name} (${asset.assetTag}) - Qty: ${asset.quantity ?? 0}` }))}
+            value={issueForm.consumableId}
+            onChange={(v) => setIssueForm((prev) => ({ ...prev, consumableId: v }))}
+            placeholder="Select consumable"
+          />
+        </div>
+
+        {selectedConsumable && (
+          <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            Available quantity: <span className="font-semibold text-gray-800">{selectedConsumable.quantity ?? 0}</span>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
+          <input
+            type="number"
+            min="1"
+            className="input-field"
+            value={issueForm.quantity}
+            onChange={(e) => setIssueForm((prev) => ({ ...prev, quantity: e.target.value }))}
+            placeholder="Enter quantity"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Issued To</label>
+          <input
+            className="input-field"
+            value={issueForm.issuedTo}
+            onChange={(e) => setIssueForm((prev) => ({ ...prev, issuedTo: e.target.value }))}
+            placeholder="Employee / Team / Department"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <textarea
+            className="input-field"
+            rows={3}
+            value={issueForm.notes}
+            onChange={(e) => setIssueForm((prev) => ({ ...prev, notes: e.target.value }))}
+            placeholder="Optional notes"
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-3 mt-6">
+        <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+        <button onClick={onIssue} disabled={issuing} className="btn-primary flex-1">
+          {issuing ? "Issuing..." : "Issue"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function HistoryModal({
+  isOpen,
+  onClose,
+  logs,
+  loading,
+  asset,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  logs: IssueLog[];
+  loading: boolean;
+  asset: Asset | null;
+}) {
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Issue History${asset ? ` - ${asset.name}` : ""}`} size="lg">
+      {loading ? (
+        <div className="py-8 text-center text-gray-500">Loading history...</div>
+      ) : logs.length === 0 ? (
+        <div className="py-8 text-center text-gray-500">No issue history found.</div>
+      ) : (
+        <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-lg">
+          {logs.map((log) => (
+            <div key={log._id} className="px-4 py-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium text-gray-800">Qty Issued: {log.quantity}</span>
+                <span className="text-xs text-gray-500">{new Date(log.createdAt).toLocaleString()}</span>
+              </div>
+              <div className="mt-1 text-xs text-gray-600">Issued To: {log.issuedTo || "—"}</div>
+              <div className="mt-1 text-xs text-gray-600">Issued By: {log.issuedBy?.name || "—"}</div>
+              <div className="mt-1 text-xs text-gray-600">Notes: {log.notes || "—"}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-3 mt-6">
+        <button onClick={onClose} className="btn-secondary flex-1">Close</button>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Extracted form body (shared between create and edit modals) ──────────────
 
 function AssetFormBody({
-  form, sf, products, vendors, departments, sites, users, consumableTypeOptions, consumableProductOptions,
+  form, sf, products, vendors, departments, sites, users, consumableTypeOptions, consumableProductOptions, isEdit,
 }: {
   form: typeof emptyForm;
   sf: <K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) => void;
@@ -1171,6 +1438,7 @@ function AssetFormBody({
   users: UserOption[];
   consumableTypeOptions: { value: string; label: string }[];
   consumableProductOptions: { value: string; label: string }[];
+  isEdit: boolean;
 }) {
   return (
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -1217,19 +1485,23 @@ function AssetFormBody({
           placeholder="0"
         />
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
-        <input className="input-field" value={form.serialNumber} onChange={(e) => sf("serialNumber", e.target.value)} placeholder="Serial number" />
-      </div>
+      {isEdit && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
+          <input className="input-field" value={form.serialNumber} onChange={(e) => sf("serialNumber", e.target.value)} placeholder="Serial number" />
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label>
         <SearchableSelect options={vendors.map((v) => ({ value: v._id, label: v.name }))}
           value={form.vendor} onChange={(v) => sf("vendor", v)} placeholder="Select vendor" noneLabel="— No Vendor —" />
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Barcode / QR Code</label>
-        <input className="input-field" value={form.barcodeQr} onChange={(e) => sf("barcodeQr", e.target.value)} placeholder="Barcode or QR value" />
-      </div>
+      {isEdit && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Barcode / QR Code</label>
+          <input className="input-field" value={form.barcodeQr} onChange={(e) => sf("barcodeQr", e.target.value)} placeholder="Barcode or QR value" />
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Cost</label>
         <div className="relative">
@@ -1250,10 +1522,12 @@ function AssetFormBody({
         <label className="block text-sm font-medium text-gray-700 mb-1">Warranty Expiry Date</label>
         <DateInput value={form.warrantyExpiryDate} onChange={(v) => sf("warrantyExpiryDate", v)} />
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-        <input className="input-field" value={form.location} onChange={(e) => sf("location", e.target.value)} placeholder="e.g. Office A, Floor 2" />
-      </div>
+      {isEdit && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+          <input className="input-field" value={form.location} onChange={(e) => sf("location", e.target.value)} placeholder="e.g. Office A, Floor 2" />
+        </div>
+      )}
       <SECTION title="Consumable State" />
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Consumable is Currently *</label>

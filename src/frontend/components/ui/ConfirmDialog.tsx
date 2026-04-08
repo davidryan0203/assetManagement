@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmText?: string;
+  cancelText?: string;
+  loadingText?: string;
   loading?: boolean;
 }
 
@@ -20,6 +22,8 @@ export default function ConfirmDialog({
   title,
   message,
   confirmText = "Delete",
+  cancelText = "Cancel",
+  loadingText = "Processing...",
   loading = false,
 }: ConfirmDialogProps) {
   return (
@@ -31,13 +35,13 @@ export default function ConfirmDialog({
         <p className="text-gray-600 text-sm">{message}</p>
         <div className="flex gap-3 w-full">
           <button onClick={onClose} className="btn-secondary flex-1">
-            Cancel
+            {cancelText}
           </button>
           <button onClick={onConfirm} disabled={loading} className="btn-danger flex-1">
             {loading ? (
               <span className="inline-flex items-center gap-2">
                 <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                Deleting...
+                {loadingText}
               </span>
             ) : (
               confirmText

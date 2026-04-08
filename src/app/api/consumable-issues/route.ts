@@ -10,10 +10,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const consumableId = searchParams.get("consumableId");
+
   const managerSiteIds = getManagerSiteIds(currentUser);
   const where = {
     consumable: {
       product: { productType: { type: "Consumable" as const } },
+      ...(consumableId ? { id: consumableId } : {}),
       ...(currentUser.role === "manager" ? { siteId: { in: managerSiteIds } } : {}),
     },
   };

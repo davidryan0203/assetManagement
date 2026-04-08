@@ -51,6 +51,8 @@ interface Asset {
   devicePurchase?: string;
   lastSeen?: string;
   numAuthDevices?: number;
+  disposalApprovalPending?: boolean;
+  disposalApprovalRequestedAt?: string;
   createdAt: string;
 }
 
@@ -166,6 +168,7 @@ export default function AssetsPage() {
   const [editAsset, setEditAsset] = useState<Asset | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const previousAssetStateRef = useRef<string>("In Store");
 
   // Delete
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -382,11 +385,13 @@ export default function AssetsPage() {
   const openCreate = () => {
     setEditAsset(null);
     setForm({ ...emptyForm });
+    previousAssetStateRef.current = "In Store";
     setShowModal(true);
   };
 
   const openEdit = (asset: Asset) => {
     setEditAsset(asset);
+    previousAssetStateRef.current = asset.assetState;
     setForm({
       name: asset.name,
       assetTag: asset.assetTag,
@@ -427,6 +432,16 @@ export default function AssetsPage() {
       toast.error("Name, asset tag, and product are required");
       return;
     }
+    if (
+      editAsset &&
+      form.assetState === "Disposed" &&
+      editAsset.assetState !== "Disposed" &&
+      !editAsset.disposalApprovalPending
+    ) {
+      promptDisposalApprovalToast();
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -457,6 +472,75 @@ export default function AssetsPage() {
       const e = err as { response?: { data?: { message?: string } } };
       toast.error(e.response?.data?.message || "Failed to save asset");
     } finally { setSaving(false); }
+  };
+
+  const handleAssetStateChange = (nextState: string) => {
+    if (
+      editAsset &&
+      nextState === "Disposed" &&
+      editAsset.assetState !== "Disposed" &&
+      !editAsset.disposalApprovalPending
+    ) {
+      previousAssetStateRef.current = form.assetState;
+      sf("assetState", nextState);
+      promptDisposalApprovalToast();
+      return;
+    }
+
+    sf("assetState", nextState);
+  };
+
+  const promptDisposalApprovalToast = () => {
+    toast.custom(
+      (t) => (
+        <div className="pointer-events-auto w-full max-w-md rounded-xl border border-amber-200 bg-white p-4 shadow-lg">
+          <p className="text-sm font-semibold text-gray-900">Approval Required</p>
+          <p className="mt-1 text-sm text-gray-600">This item needs approval before being marked as disposed.</p>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              className="btn-secondary px-3 py-1.5 text-sm"
+              onClick={() => {
+                sf("assetState", previousAssetStateRef.current || "In Store");
+                toast.dismiss(t.id);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-primary px-3 py-1.5 text-sm"
+              onClick={async () => {
+                toast.dismiss(t.id);
+                await handleProceedDisposalApproval();
+              }}
+            >
+              Proceed
+            </button>
+          </div>
+        </div>
+      ),
+      { duration: Infinity }
+    );
+  };
+
+  const handleProceedDisposalApproval = async () => {
+    if (!editAsset) return;
+    setSaving(true);
+    try {
+      await api.post(`/assets/${editAsset._id}/disposal-approval`, {
+        stateComments: form.stateComments,
+      });
+      toast.success("Approval request sent. Asset state remains unchanged until approved.");
+      previousAssetStateRef.current = form.assetState;
+      setShowModal(false);
+      fetchAssets();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Failed to send disposal approval request");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -566,6 +650,11 @@ export default function AssetsPage() {
                   {a.assetState}
                 </span>
               } />
+              {a.disposalApprovalPending && (
+                <div className="sm:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  This item is currently in the approval process for disposal.
+                </div>
+              )}
               <DetailRow label="User" value={a.assignedTo?.name} />
               <DetailRow
                 label="Associated to Asset"
@@ -609,6 +698,7 @@ export default function AssetsPage() {
             form={form} sf={sf} products={products} vendors={vendors}
             departments={departments} sites={sites} allAssets={allAssets}
             editAsset={editAsset} selectedProductObj={selectedProductObj} users={users}
+            onAssetStateChange={handleAssetStateChange}
           />
           <div className="flex gap-3 mt-6">
             <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -1030,6 +1120,7 @@ export default function AssetsPage() {
           form={form} sf={sf} products={products} vendors={vendors}
           departments={departments} sites={sites} allAssets={allAssets}
           editAsset={editAsset} selectedProductObj={selectedProductObj} users={users}
+          onAssetStateChange={handleAssetStateChange}
         />
         <div className="flex gap-3 mt-6">
           <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -1342,6 +1433,7 @@ function AssetAssociationMultiSelect({
 
 function AssetFormBody({
   form, sf, products, vendors, departments, sites, allAssets, editAsset, selectedProductObj, users,
+  onAssetStateChange,
 }: {
   form: typeof emptyForm;
   sf: <K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) => void;
@@ -1353,6 +1445,7 @@ function AssetFormBody({
   editAsset: Asset | null;
   selectedProductObj: Product | undefined;
   users: UserOption[];
+  onAssetStateChange: (value: string) => void;
 }) {
   return (
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -1418,9 +1511,14 @@ function AssetFormBody({
       <SECTION title="Asset State" />
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Asset is Currently *</label>
-        <select className="input-field" value={form.assetState} onChange={(e) => sf("assetState", e.target.value)}>
+        <select className="input-field" value={form.assetState} onChange={(e) => onAssetStateChange(e.target.value)}>
           {ASSET_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        {editAsset?.disposalApprovalPending && (
+          <p className="mt-1 text-xs text-red-600">
+            This item is currently in the approval process for disposal.
+          </p>
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Associated To</label>
