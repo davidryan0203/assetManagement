@@ -11,6 +11,10 @@ export async function GET(req: NextRequest) {
   const managerScope = currentUser.role === "manager" && managerSiteIds.length > 0
     ? { in: managerSiteIds }
     : null;
+  const assetOnlyWhere = scopeAssetWhereToUser(
+    { product: { productType: { type: "Asset" } } },
+    currentUser,
+  );
 
   const [
     totalAssets,
@@ -21,11 +25,11 @@ export async function GET(req: NextRequest) {
     totalUsers,
     totalDepartments,
   ] = await Promise.all([
-    prisma.asset.count({ where: scopeAssetWhereToUser({}, currentUser) }),
-    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "InStore" }, currentUser) }),
-    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "Assigned" }, currentUser) }),
-    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "UnderRepair" }, currentUser) }),
-    prisma.asset.count({ where: scopeAssetWhereToUser({ assetState: "Retired" }, currentUser) }),
+    prisma.asset.count({ where: assetOnlyWhere }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ product: { productType: { type: "Asset" } }, assetState: "InStore" }, currentUser) }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ product: { productType: { type: "Asset" } }, assetState: "Assigned" }, currentUser) }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ product: { productType: { type: "Asset" } }, assetState: "UnderRepair" }, currentUser) }),
+    prisma.asset.count({ where: scopeAssetWhereToUser({ product: { productType: { type: "Asset" } }, assetState: "Retired" }, currentUser) }),
     managerScope
       ? prisma.user.count({ where: { siteId: managerScope } })
       : prisma.user.count(),
@@ -34,16 +38,18 @@ export async function GET(req: NextRequest) {
       : prisma.department.count(),
   ]);
 
-  const recentAssetsDb = await prisma.asset.findMany({
-    where: scopeAssetWhereToUser({}, currentUser),
+  const assetsDb = await prisma.asset.findMany({
+    where: assetOnlyWhere,
     include: {
-      product: { include: { category: true } },
+      product: { include: { category: true, productType: true } },
       department: true,
+      site: true,
       assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
     },
     orderBy: { createdAt: "desc" },
-    take: 5,
   });
+
+  const recentAssetsDb = assetsDb.slice(0, 5);
 
   const recentAssets = recentAssetsDb.map((asset) => {
     const a = serializeAsset(asset);
@@ -68,6 +74,23 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  const assets = assetsDb.map((asset) => {
+    const a = serializeAsset(asset);
+    return {
+      _id: a._id,
+      name: a.name,
+      assetTag: a.assetTag,
+      assetState: a.assetState,
+      expiryDate: a.expiryDate,
+      warrantyExpiryDate: a.warrantyExpiryDate,
+      product: a.product,
+      department: a.department,
+      site: a.site,
+      assignedTo: a.assignedTo,
+      stateComments: a.stateComments,
+    };
+  });
+
   return NextResponse.json({
     stats: {
       totalAssets,
@@ -78,6 +101,7 @@ export async function GET(req: NextRequest) {
       totalUsers,
       totalDepartments,
     },
+    assets,
     recentAssets,
   });
 }
