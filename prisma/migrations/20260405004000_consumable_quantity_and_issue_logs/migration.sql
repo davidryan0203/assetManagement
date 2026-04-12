@@ -19,4 +19,4 @@ CREATE TABLE `consumable_issue_logs` (
     FOREIGN KEY (`consumableId`) REFERENCES `assets`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `consumable_issue_logs_issuedById_fkey`
     FOREIGN KEY (`issuedById`) REFERENCES `users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-);
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

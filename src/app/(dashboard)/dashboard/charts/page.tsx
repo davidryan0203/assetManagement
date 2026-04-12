@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import api from "@backend/lib/api";
 import toast from "react-hot-toast";
 import {
-  FiBarChart2,
   FiCalendar,
   FiChevronDown,
   FiCheckCircle,
@@ -16,18 +15,15 @@ import {
   FiTrendingUp,
   FiUsers,
 } from "react-icons/fi";
-import { Bar, Doughnut } from "react-chartjs-2";
+import { Doughnut } from "react-chartjs-2";
 import {
   ArcElement,
-  BarElement,
-  CategoryScale,
   Chart as ChartJS,
   Legend,
-  LinearScale,
   Tooltip,
 } from "chart.js";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 interface AssetChartItem {
   _id: string;
@@ -44,7 +40,7 @@ interface AssetChartItem {
 
 type Slice = { label: string; value: number; color: string };
 
-type ChartKind = "status" | "trend" | "department" | "category" | "assignee";
+type ChartKind = "status" | "department";
 
 interface ChartPanelState {
   kind: ChartKind;
@@ -213,61 +209,6 @@ function DonutChart({ slices, total }: { slices: Slice[]; total: number }) {
   );
 }
 
-function BarChart({ points }: { points: Slice[] }) {
-  if (points.length === 0) {
-    return <div className="h-64 flex items-center justify-center text-sm text-gray-400">No data for selected dates.</div>;
-  }
-
-  const data = {
-    labels: points.map((point) => point.label),
-    datasets: [
-      {
-        label: "Assets created",
-        data: points.map((point) => point.value),
-        backgroundColor: points.map(() => "rgba(59, 130, 246, 0.8)"),
-        borderRadius: 8,
-      },
-    ],
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top" as const,
-        labels: {
-          usePointStyle: true,
-          boxWidth: 10,
-          boxHeight: 10,
-        },
-      },
-      tooltip: {
-        callbacks: {
-          label: (context: { parsed: { y: number } }) => ` ${context.parsed.y.toLocaleString()} assets`,
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: { color: "#6b7280" },
-      },
-      y: {
-        beginAtZero: true,
-        ticks: { precision: 0, color: "#6b7280" },
-        grid: { color: "rgba(148, 163, 184, 0.18)" },
-      },
-    },
-  };
-
-  return (
-    <div className="h-72">
-      <Bar data={data} options={options} />
-    </div>
-  );
-}
-
 export default function ChartsPage() {
   const [assets, setAssets] = useState<AssetChartItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -299,9 +240,6 @@ export default function ChartsPage() {
 
   const statusBreakdown = useMemo<Slice[]>(() => buildBreakdown(currentAssets, (asset) => asset.assetState, STATUS_COLORS), [currentAssets]);
   const departmentBreakdown = useMemo<Slice[]>(() => buildBreakdown(currentAssets, (asset) => asset.department?.name || "Unassigned", CATEGORY_COLORS), [currentAssets]);
-  const categoryBreakdown = useMemo<Slice[]>(() => buildBreakdown(currentAssets, (asset) => asset.product?.category?.name || "Uncategorized", CATEGORY_COLORS), [currentAssets]);
-  const assigneeBreakdown = useMemo<Slice[]>(() => buildBreakdown(currentAssets, (asset) => asset.assignedTo?.name || "Unassigned", CATEGORY_COLORS), [currentAssets]);
-  const trendPoints = useMemo<Slice[]>(() => buildDailyTrend(currentAssets, range.from, range.to), [currentAssets, range.from, range.to]);
   const categoryAvailabilityRows = useMemo(() => buildAvailabilityRows(currentAssets), [currentAssets]);
   const [expandedChart, setExpandedChart] = useState<ChartPanelState | null>(null);
 
@@ -447,31 +385,15 @@ export default function ChartsPage() {
         </ChartCard>
 
         <ChartCard
-          title="Assets Created Over Time"
-          subtitle="Daily asset creation activity in the selected date range."
-          onExpand={() => setExpandedChart({ kind: "trend", title: "Assets Created Over Time", subtitle: "Daily asset creation activity in the selected date range." })}
-        >
-          <BarChart points={trendPoints} />
-        </ChartCard>
-
-        <ChartCard
           title="Assets by Department"
           subtitle="Where assets are most concentrated."
           onExpand={() => setExpandedChart({ kind: "department", title: "Assets by Department", subtitle: "Where assets are most concentrated." })}
         >
           <DonutChart slices={departmentBreakdown} total={currentTotals.total} />
         </ChartCard>
-
-        <ChartCard
-          title="Assets by Category"
-          subtitle="Product category distribution for the selected range."
-          onExpand={() => setExpandedChart({ kind: "category", title: "Assets by Category", subtitle: "Product category distribution for the selected range." })}
-        >
-          <DonutChart slices={categoryBreakdown} total={currentTotals.total} />
-        </ChartCard>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <SectionCard title="Availability by Category" subtitle="Useful for spotting where available assets are concentrated.">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -507,13 +429,6 @@ export default function ChartsPage() {
           </div>
         </SectionCard>
 
-        <ChartCard
-          title="Top Assigned Users"
-          subtitle="Shows where assets are currently assigned most often."
-          onExpand={() => setExpandedChart({ kind: "assignee", title: "Top Assigned Users", subtitle: "Shows where assets are currently assigned most often." })}
-        >
-          <HorizontalBars items={assigneeBreakdown} />
-        </ChartCard>
       </div>
 
       {expandedChart && (
@@ -534,10 +449,7 @@ export default function ChartsPage() {
             </div>
             <div className="p-5">
               {expandedChart.kind === "status" && <DonutChart slices={statusBreakdown} total={currentTotals.total} />}
-              {expandedChart.kind === "trend" && <BarChart points={trendPoints} />}
               {expandedChart.kind === "department" && <DonutChart slices={departmentBreakdown} total={currentTotals.total} />}
-              {expandedChart.kind === "category" && <DonutChart slices={categoryBreakdown} total={currentTotals.total} />}
-              {expandedChart.kind === "assignee" && <HorizontalBars items={assigneeBreakdown} />}
             </div>
           </div>
         </div>
@@ -582,84 +494,6 @@ function buildBreakdown(
         : palette[label] || palette["Other"] || "#94a3b8",
     }))
     .filter((item) => item.value > 0);
-}
-
-function HorizontalBars({ items }: { items: Slice[] }) {
-  if (items.length === 0) {
-    return <div className="h-56 flex items-center justify-center text-sm text-gray-400">No data for selected dates.</div>;
-  }
-
-  const data = {
-    labels: items.map((item) => item.label),
-    datasets: [
-      {
-        label: "Assets",
-        data: items.map((item) => item.value),
-        backgroundColor: items.map((item) => item.color),
-        borderRadius: 8,
-      },
-    ],
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    indexAxis: "y" as const,
-    plugins: {
-      legend: {
-        position: "top" as const,
-        labels: {
-          usePointStyle: true,
-          boxWidth: 10,
-          boxHeight: 10,
-        },
-      },
-      tooltip: {
-        callbacks: {
-          label: (context: { parsed: { x: number } }) => ` ${context.parsed.x.toLocaleString()} assets`,
-        },
-      },
-    },
-    scales: {
-      x: {
-        beginAtZero: true,
-        ticks: { precision: 0, color: "#6b7280" },
-        grid: { color: "rgba(148, 163, 184, 0.18)" },
-      },
-      y: {
-        ticks: { color: "#6b7280" },
-        grid: { display: false },
-      },
-    },
-  };
-
-  return <div className="h-72"><Bar data={data} options={options} /></div>;
-}
-
-function buildDailyTrend(items: AssetChartItem[], from: Date, to: Date): Slice[] {
-  const counts = new Map<string, number>();
-  for (const item of items) {
-    const key = formatDateInput(new Date(item.createdAt));
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  const days: Slice[] = [];
-  const cursor = new Date(from);
-  cursor.setHours(0, 0, 0, 0);
-  const end = new Date(to);
-  end.setHours(23, 59, 59, 999);
-
-  while (cursor <= end) {
-    const key = formatDateInput(cursor);
-    days.push({
-      label: formatShortDate(cursor),
-      value: counts.get(key) ?? 0,
-      color: "#3b82f6",
-    });
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return days;
 }
 
 function buildAvailabilityRows(items: AssetChartItem[]) {
@@ -729,10 +563,6 @@ function formatDateInput(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function formatShortDate(date: Date) {
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
 }
 
 function formatDisplayDate(date: Date) {

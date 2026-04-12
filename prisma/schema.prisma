@@ -324,3 +324,12 @@ model Report {
   @@index([createdById])
   @@map("reports")
 }
+
+model AppSetting {
+  keyName   String   @id @db.VarChar(191) @map("key_name")
+  valueText String?  @db.Text @map("value_text")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}

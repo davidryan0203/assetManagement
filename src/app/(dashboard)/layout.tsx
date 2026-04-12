@@ -38,7 +38,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="flex min-h-dvh bg-gray-50 overflow-hidden">
+    <div className="flex min-h-dvh bg-gray-50 overflow-x-hidden">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 lg:hidden"

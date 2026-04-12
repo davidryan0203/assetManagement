@@ -17,6 +17,7 @@ import {
   FiTruck,
   FiCpu,
   FiBarChart2,
+  FiSettings,
   FiX,
 } from "react-icons/fi";
 
@@ -42,6 +43,7 @@ const navItems: NavItem[] = [
   { label: "Departments", href: "/dashboard/departments", icon: <FiBriefcase />, roles: ["admin"], section: "main" },
   { label: "Sites", href: "/dashboard/sites", icon: <FiMapPin />, roles: ["admin"], section: "main" },
   { label: "Reports", href: "/dashboard/reports", icon: <FiBarChart2 />, section: "main" },
+  { label: "Settings", href: "/dashboard/settings", icon: <FiSettings />, roles: ["admin"], section: "main" },
   { label: "Categories", href: "/dashboard/categories", icon: <FiTag />, roles: ["admin"], section: "catalog" },
   { label: "Vendors", href: "/dashboard/vendors", icon: <FiTruck />, roles: ["admin"], section: "catalog" },
   { label: "Products", href: "/dashboard/products", icon: <FiCpu />, roles: ["admin"], section: "catalog" },
@@ -62,7 +64,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       className={`
         fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col h-full transform transition-transform duration-200 ease-out
         ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-        lg:static lg:z-auto lg:w-64 lg:translate-x-0
+        lg:sticky lg:top-0 lg:z-30 lg:w-64 lg:h-dvh lg:translate-x-0
       `}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 lg:hidden">

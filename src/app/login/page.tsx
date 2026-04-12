@@ -4,7 +4,8 @@ import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@frontend/context/AuthContext";
 import toast from "react-hot-toast";
-import { FiMail, FiLock, FiEye, FiEyeOff, FiPackage } from "react-icons/fi";
+import Image from "next/image";
+import { FiMail, FiLock, FiEye, FiEyeOff } from "react-icons/fi";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -48,8 +49,15 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
-            <FiPackage className="text-primary-600 text-3xl" />
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-4 overflow-hidden border border-white/50">
+            <Image
+              src="/brand-logo.jpeg"
+              alt="Mamu Tshishkutamashutau Innu Education"
+              width={80}
+              height={80}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
           <h1 className="text-3xl font-bold text-white">Mamu Tshishkutamashutau Innu Education</h1>
           <p className="text-primary-200 mt-1">Asset Management System</p>

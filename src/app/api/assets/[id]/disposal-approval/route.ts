@@ -1,11 +1,11 @@
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { DisposalApprovalStatus } from "@prisma/client";
 import prisma from "@backend/lib/prisma";
 import { getUserFromRequest } from "@backend/lib/jwt";
 import { sendDisposalApprovalEmail } from "@backend/lib/email";
+import { getDisposalRecipientEmails } from "@backend/lib/appSettings";
 
-const TEST_RECIPIENT_EMAIL = "davidryan0203@gmail.com";
+const prismaCompat = prisma as any;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const currentUser = getUserFromRequest(req);
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const asset = await prisma.asset.findUnique({
+  const asset = await prismaCompat.asset.findUnique({
     where: { id },
     select: {
       id: true,
@@ -45,19 +45,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ message: "Disposal approval is already pending for this asset" }, { status: 409 });
   }
 
+  let recipientEmails: string[] = [];
+  try {
+    recipientEmails = await getDisposalRecipientEmails();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load disposal recipient settings";
+    return NextResponse.json({ message }, { status: 500 });
+  }
+
+  if (recipientEmails.length === 0) {
+    return NextResponse.json({ message: "No disposal approval recipients configured. Update Settings first." }, { status: 400 });
+  }
+
+  const recipientEmail = recipientEmails.join(",");
+
   const token = randomBytes(32).toString("hex");
-  const requestRecord = await prisma.disposalApprovalRequest.create({
+  const requestRecord = await prismaCompat.disposalApprovalRequest.create({
     data: {
       asset: { connect: { id: asset.id } },
       requestedBy: { connect: { id: currentUser.id } },
-      recipientEmail: TEST_RECIPIENT_EMAIL,
+      recipientEmail,
       token,
-      status: DisposalApprovalStatus.Pending,
+      status: "Pending",
     },
     select: { id: true, token: true },
   });
 
-  await prisma.asset.update({
+  await prismaCompat.asset.update({
     where: { id: asset.id },
     data: {
       disposalApprovalPending: true,
@@ -75,7 +89,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     await sendDisposalApprovalEmail({
-      recipientEmail: TEST_RECIPIENT_EMAIL,
+      recipientEmail,
       requestedByName: currentUser.name,
       assetTag: asset.assetTag,
       assetName: asset.name,
@@ -85,15 +99,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       declineUrl,
     });
   } catch (error) {
-    await prisma.$transaction([
-      prisma.disposalApprovalRequest.update({
+    await prismaCompat.$transaction([
+      prismaCompat.disposalApprovalRequest.update({
         where: { id: requestRecord.id },
         data: {
-          status: DisposalApprovalStatus.Cancelled,
+          status: "Cancelled",
           actedAt: new Date(),
         },
       }),
-      prisma.asset.update({
+      prismaCompat.asset.update({
         where: { id: asset.id },
         data: {
           disposalApprovalPending: false,
