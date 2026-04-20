@@ -5,7 +5,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import api from "@backend/lib/api";
 import { useAuth } from "@frontend/context/AuthContext";
-import { FiSave, FiUsers, FiSettings, FiMail } from "react-icons/fi";
+import { FiSave, FiUsers, FiSettings, FiMail, FiUploadCloud, FiMapPin } from "react-icons/fi";
 
 type Role = "admin" | "manager" | "staff";
 
@@ -17,13 +17,23 @@ type UserItem = {
   isActive: boolean;
 };
 
+type SiteItem = {
+  id: string;
+  _id: string;
+  name: string;
+};
+
 export default function SettingsPage() {
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [savingRecipients, setSavingRecipients] = useState(false);
   const [recipientsInput, setRecipientsInput] = useState("");
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [sites, setSites] = useState<SiteItem[]>([]);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadingAssets, setUploadingAssets] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -34,8 +44,9 @@ export default function SettingsPage() {
     Promise.all([
       api.get("/settings/disposal-recipients"),
       api.get("/users"),
+      api.get("/sites"),
     ])
-      .then(([settingsRes, usersRes]) => {
+      .then(([settingsRes, usersRes, sitesRes]) => {
         const recipients: string[] = settingsRes.data?.recipients || [];
         setRecipientsInput(recipients.join(", "));
 
@@ -47,6 +58,9 @@ export default function SettingsPage() {
           isActive: user.isActive,
         }));
         setUsers(fetchedUsers);
+
+        const fetchedSites: SiteItem[] = sitesRes.data?.sites || [];
+        setSites(fetchedSites);
       })
       .catch((error: unknown) => {
         const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -91,6 +105,63 @@ export default function SettingsPage() {
       toast.error(message || "Failed to update user");
     } finally {
       setSavingUserId(null);
+    }
+  };
+
+  const uploadAssets = async () => {
+    if (!selectedSiteId) {
+      toast.error("Please select a site");
+      return;
+    }
+
+    if (!uploadFile) {
+      toast.error("Please choose a CSV or XLSX file");
+      return;
+    }
+
+    const lowerName = uploadFile.name.toLowerCase();
+    if (!lowerName.endsWith(".csv") && !lowerName.endsWith(".xlsx") && !lowerName.endsWith(".xls")) {
+      toast.error("Unsupported file type. Use CSV or XLSX.");
+      return;
+    }
+
+    setUploadingAssets(true);
+    try {
+      const formData = new FormData();
+      formData.append("siteId", selectedSiteId);
+      formData.append("file", uploadFile);
+
+      const response = await api.post("/assets/bulk-import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast.success(`Imported ${response.data?.importedCount || 0} assets successfully`);
+      setUploadFile(null);
+    } catch (error: unknown) {
+      const errorData = (error as { response?: { data?: { message?: string; existingAssets?: Array<{ assetTag: string }>; duplicateAssetTags?: string[]; errors?: string[]; errorCount?: number } } })
+        ?.response?.data;
+
+      if (errorData?.duplicateAssetTags?.length) {
+        toast.error(`Duplicate asset tags in file: ${errorData.duplicateAssetTags.slice(0, 5).join(", ")}`);
+        return;
+      }
+
+      if (errorData?.existingAssets?.length) {
+        const tags = errorData.existingAssets.slice(0, 5).map((item) => item.assetTag).join(", ");
+        toast.error(`Upload halted. Existing asset tags found: ${tags}`);
+        return;
+      }
+
+      if (errorData?.errors?.length) {
+        const head = errorData.errors.slice(0, 2).join(" | ");
+        const more = errorData.errorCount && errorData.errorCount > 2 ? ` (+${errorData.errorCount - 2} more)` : "";
+        toast.error(`${head}${more}`);
+        return;
+      }
+
+      toast.error(errorData?.message || "Failed to import assets");
+    } finally {
+      setUploadingAssets(false);
     }
   };
 
@@ -219,6 +290,69 @@ export default function SettingsPage() {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="card rounded-2xl border border-gray-200 p-5">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-lg bg-sky-50 p-2 text-sky-600">
+            <FiUploadCloud />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Bulk Asset Upload</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Import the migration sheet ("For migration" tab export) and assign all rows to the selected site.
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Expected columns: Asset ID, Asset Tag (optional), Product Type, Product, Serial, Location.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Site</label>
+            <div className="relative">
+              <FiMapPin className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <select
+                value={selectedSiteId}
+                onChange={(e) => setSelectedSiteId(e.target.value)}
+                className="input-field w-full pl-9"
+              >
+                <option value="">Select a site</option>
+                {sites.map((site) => (
+                  <option key={site._id || site.id} value={site._id || site.id}>
+                    {site.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Upload File</label>
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+              className="input-field w-full"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              {uploadFile ? `Selected: ${uploadFile.name}` : "Choose a CSV or XLSX file"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={uploadAssets}
+            disabled={uploadingAssets}
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <FiUploadCloud />
+            {uploadingAssets ? "Uploading..." : "Upload And Import"}
+          </button>
         </div>
       </div>
     </div>
