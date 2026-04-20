@@ -5,7 +5,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import api from "@backend/lib/api";
 import { useAuth } from "@frontend/context/AuthContext";
-import { FiSave, FiUsers, FiSettings, FiMail, FiUploadCloud, FiMapPin } from "react-icons/fi";
+import { FiSave, FiUsers, FiSettings, FiMail, FiUploadCloud, FiMapPin, FiRotateCcw } from "react-icons/fi";
 
 type Role = "admin" | "manager" | "staff";
 
@@ -34,6 +34,8 @@ export default function SettingsPage() {
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadingAssets, setUploadingAssets] = useState(false);
+  const [rollbackFile, setRollbackFile] = useState<File | null>(null);
+  const [rollingBackDatabase, setRollingBackDatabase] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -162,6 +164,43 @@ export default function SettingsPage() {
       toast.error(errorData?.message || "Failed to import assets");
     } finally {
       setUploadingAssets(false);
+    }
+  };
+
+  const rollbackDatabase = async () => {
+    if (!rollbackFile) {
+      toast.error("Please choose a SQL dump file");
+      return;
+    }
+
+    if (!rollbackFile.name.toLowerCase().endsWith(".sql")) {
+      toast.error("Unsupported file type. Use a .sql file.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "This will rollback database records from the uploaded SQL file and keep users untouched. Continue?",
+    );
+    if (!confirmed) return;
+
+    setRollingBackDatabase(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", rollbackFile);
+
+      const response = await api.post("/settings/db-rollback", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const restored = response.data?.restoredTables as Record<string, number> | undefined;
+      const restoredCount = restored ? Object.values(restored).reduce((sum, count) => sum + count, 0) : 0;
+      toast.success(`Rollback complete. Restored ${restoredCount} SQL statement(s).`);
+      setRollbackFile(null);
+    } catch (error: unknown) {
+      const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(message || "Failed to rollback database");
+    } finally {
+      setRollingBackDatabase(false);
     }
   };
 
@@ -353,6 +392,47 @@ export default function SettingsPage() {
             <FiUploadCloud />
             {uploadingAssets ? "Uploading..." : "Upload And Import"}
           </button>
+        </div>
+
+        <div className="mt-6 border-t border-gray-100 pt-6">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-lg bg-rose-50 p-2 text-rose-600">
+              <FiRotateCcw />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Database Rollback Upload (Keeps Users)</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Upload a MySQL dump (`.sql`) to rollback records while preserving current users.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">SQL Rollback File</label>
+              <input
+                type="file"
+                accept=".sql"
+                onChange={(e) => setRollbackFile(e.target.files?.[0] || null)}
+                className="input-field w-full"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                {rollbackFile ? `Selected: ${rollbackFile.name}` : "Choose a .sql file"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={rollbackDatabase}
+              disabled={rollingBackDatabase}
+              className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <FiRotateCcw />
+              {rollingBackDatabase ? "Rolling Back..." : "Run Rollback"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
