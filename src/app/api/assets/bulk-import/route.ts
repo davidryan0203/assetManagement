@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import prisma from "@backend/lib/prisma";
 import { getUserFromRequest } from "@backend/lib/jwt";
 import * as XLSX from "xlsx";
@@ -13,45 +12,6 @@ type ParsedAssetRow = {
   productTypeName: string;
   departmentName: string;
 };
-
-function slugifyDepartmentCodeSeed(value: string) {
-  const cleaned = value
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .trim();
-  if (!cleaned) return "DEPT";
-  return cleaned.slice(0, 8);
-}
-
-async function buildDepartmentCodes(
-  tx: Prisma.TransactionClient,
-  names: string[]
-): Promise<Map<string, string>> {
-  const uniqueNames = Array.from(new Set(names.map((name) => name.trim()).filter(Boolean)));
-  if (uniqueNames.length === 0) return new Map();
-
-  const usedCodeRows = await tx.department.findMany({
-    select: { code: true },
-  });
-  const usedCodes = new Set(usedCodeRows.map((row) => row.code.toUpperCase()));
-
-  const codeByName = new Map<string, string>();
-  for (const name of uniqueNames) {
-    const seed = slugifyDepartmentCodeSeed(name);
-    let candidate = seed;
-    let suffix = 1;
-    while (usedCodes.has(candidate)) {
-      const suffixText = String(suffix);
-      const prefixLimit = Math.max(1, 8 - suffixText.length);
-      candidate = `${seed.slice(0, prefixLimit)}${suffixText}`;
-      suffix += 1;
-    }
-    usedCodes.add(candidate);
-    codeByName.set(name, candidate);
-  }
-
-  return codeByName;
-}
 
 type HeaderIndexMap = {
   assetId: number;
@@ -304,15 +264,9 @@ export async function POST(req: NextRequest) {
       select: { id: true, name: true, productTypeId: true, categoryId: true },
     });
 
-    let departments = await prisma.department.findMany({
-      select: { id: true, name: true },
-    });
-    let departmentsByName = new Map(departments.map((dept) => [normalizeMatchKey(dept.name), dept]));
-
     const validationErrors: string[] = [];
     const productTypeCreatesByKey = new Map<string, { name: string; categoryId: string }>();
     const productCreatesByKey = new Map<string, { name: string; productTypeId: string; categoryId: string }>();
-    const departmentCreatesByKey = new Map<string, string>();
     const prepared = parsedRows.map((row) => {
       const matchedProductType = productTypesByName.get(normalizeMatchKey(row.productTypeName));
 
@@ -326,18 +280,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const matchedDepartment = departmentsByName.get(normalizeMatchKey(row.departmentName));
-      if (!matchedDepartment) {
-        const key = normalizeMatchKey(row.departmentName);
-        if (!departmentCreatesByKey.has(key)) {
-          departmentCreatesByKey.set(key, row.departmentName);
-        }
-      }
-
       return {
         ...row,
         productId: "",
-        departmentId: matchedDepartment?.id || "",
       };
     });
 
@@ -411,44 +356,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const newDepartmentNames = Array.from(departmentCreatesByKey.values());
-    if (newDepartmentNames.length > 0) {
-      await prisma.$transaction(async (tx) => {
-        const codeByName = await buildDepartmentCodes(tx, newDepartmentNames);
-        await tx.department.createMany({
-          data: newDepartmentNames.map((name) => ({
-            name,
-            code: codeByName.get(name) || "DEPT",
-            description: "Auto-created from asset bulk upload",
-            isActive: true,
-          })),
-          skipDuplicates: true,
-        });
-      });
-
-      departments = await prisma.department.findMany({
-        select: { id: true, name: true },
-      });
-      departmentsByName = new Map(departments.map((dept) => [normalizeMatchKey(dept.name), dept]));
-    }
-
-    const unresolvedDepartments = prepared
-      .map((row) => ({ rowNumber: row.rowNumber, departmentName: row.departmentName, dept: departmentsByName.get(normalizeMatchKey(row.departmentName)) }))
-      .filter((row) => !row.dept);
-
-    if (unresolvedDepartments.length > 0) {
-      return NextResponse.json(
-        {
-          message: "Upload halted due to unresolved departments",
-          errors: unresolvedDepartments.slice(0, 30).map((row) => (
-            `Row ${row.rowNumber}: Unknown Department/Location \"${row.departmentName}\"`
-          )),
-          errorCount: unresolvedDepartments.length,
-        },
-        { status: 400 }
-      );
-    }
-
     const now = new Date();
     const productsByKey = new Map(
       products
@@ -491,7 +398,7 @@ export async function POST(req: NextRequest) {
       serialNumber: row.serialNumber || null,
       location: row.departmentName,
       productId: product?.id || row.productId,
-      departmentId: departmentsByName.get(normalizeMatchKey(row.departmentName))?.id || row.departmentId,
+      departmentId: null,
       siteId: site.id,
       createdById: currentUser.id,
       assetState: "Assigned" as const,
@@ -510,7 +417,7 @@ export async function POST(req: NextRequest) {
       importedCount: createData.length,
       createdProductTypes: newProductTypes.length,
       createdProducts: newProducts.length,
-      createdDepartments: newDepartmentNames.length,
+      createdDepartments: 0,
       site: { id: site.id, name: site.name },
     });
   } catch (error) {
