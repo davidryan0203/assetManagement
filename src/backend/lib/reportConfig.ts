@@ -73,7 +73,7 @@ export const REPORT_MODULES: ModuleDef[] = [
       { key: "numAuthDevices", label: "Num Auth Devices" },
       { key: "product.name", label: "Product" },
       { key: "product.sku", label: "SKU" },
-      { key: "product.category.name", label: "Product Type" },
+      { key: "product.productType.name", label: "Product Type" },
       { key: "product.vendor.name", label: "Product Manufacturer" },
       { key: "vendor.name", label: "Vendor" },
       { key: "department.name", label: "Department" },

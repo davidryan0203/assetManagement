@@ -21,7 +21,7 @@ const ASSET_FILTER_FIELDS: SelectedColumn[] = [
   { key: "assetState", label: "State" },
   { key: "acquisitionDate", label: "Acquisition Date" },
   { key: "product.name", label: "Product" },
-  { key: "product.category.name", label: "Product Type" },
+  { key: "product.productType.name", label: "Product Type" },
   { key: "site.name", label: "Site" },
   { key: "department.name", label: "Department" },
   { key: "assignedTo.name", label: "User" },
@@ -152,7 +152,7 @@ function WizardContent() {
       return sites.map((site) => site.name).filter(Boolean);
     }
 
-    if (field === "product.category.name" || field === "category.name") {
+    if (field === "product.productType.name" || field === "product.category.name" || field === "category.name") {
       const values = [
         ...productTypes.map((productType) => productType.name),
         ...categories.map((category) => category.name),

@@ -38,7 +38,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="flex min-h-dvh bg-gray-50 overflow-x-hidden">
+    <div className="flex min-h-screen bg-gray-50 overflow-x-hidden">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 lg:hidden"
@@ -46,7 +46,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         />
       )}
       <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex-1 flex min-w-0 flex-col overflow-hidden">
+      <div className="flex-1 flex min-w-0 flex-col overflow-hidden min-h-screen">
         <Navbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">{children}</main>
       </div>

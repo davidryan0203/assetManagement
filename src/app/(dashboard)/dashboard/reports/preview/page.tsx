@@ -17,6 +17,12 @@ interface ReportMeta {
   selectedColumns: SelectedColumn[];
 }
 
+type AssetBreakdownItem = {
+  productType: string;
+  total: number;
+  products: Array<{ name: string; count: number }>;
+};
+
 type SortDirection = "asc" | "desc";
 
 function PreviewContent() {
@@ -60,6 +66,34 @@ function PreviewContent() {
 
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / rowsPerPage));
   const paginated = sortedRows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  const tableRows = paginated;
+
+  const assetBreakdown = useMemo<AssetBreakdownItem[]>(() => {
+    if (report?.module !== "Assets") return [];
+
+    const byType = new Map<string, { total: number; products: Map<string, number> }>();
+    for (const row of sortedRows) {
+      const productType = String(
+        row["product.productType.name"] ?? row["product.category.name"] ?? "Unspecified"
+      ).trim() || "Unspecified";
+      const productName = String(row["product.name"] ?? "Unspecified").trim() || "Unspecified";
+
+      const typeBucket = byType.get(productType) || { total: 0, products: new Map<string, number>() };
+      typeBucket.total += 1;
+      typeBucket.products.set(productName, (typeBucket.products.get(productName) || 0) + 1);
+      byType.set(productType, typeBucket);
+    }
+
+    return Array.from(byType.entries())
+      .map(([productType, payload]) => ({
+        productType,
+        total: payload.total,
+        products: Array.from(payload.products.entries())
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => b.total - a.total || a.productType.localeCompare(b.productType));
+  }, [report?.module, sortedRows]);
 
   useEffect(() => {
     setPage(1);
@@ -311,9 +345,20 @@ function PreviewContent() {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
-                {paginated.map((row, idx) => (
+              <tbody className="divide-y divide-gray-50 print:hidden">
+                {tableRows.map((row, idx) => (
                   <tr key={idx} className="hover:bg-gray-50/70 transition-colors print:hover:bg-transparent">
+                    {displayCols.map((col) => (
+                      <td key={col.key} className="py-2 px-2 text-gray-700 whitespace-nowrap print:whitespace-normal">
+                        {String(row[col.key] ?? "—")}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+              <tbody className="hidden print:table-row-group divide-y divide-gray-50">
+                {sortedRows.map((row, idx) => (
+                  <tr key={`print-${idx}`} className="print:hover:bg-transparent">
                     {displayCols.map((col) => (
                       <td key={col.key} className="py-2 px-2 text-gray-700 whitespace-nowrap print:whitespace-normal">
                         {String(row[col.key] ?? "—")}
@@ -326,26 +371,24 @@ function PreviewContent() {
           )}
         </div>
 
-        {/* Bottom pagination */}
-        {totalPages > 1 && (
-          <div className="print:hidden flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
-            <span>
-              Showing {sortedRows.length === 0 ? 0 : ((page - 1) * rowsPerPage) + 1}–{Math.min(page * rowsPerPage, sortedRows.length)} of {sortedRows.length.toLocaleString()} records
-            </span>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage(1)} disabled={page === 1}
-                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-40">First</button>
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40">
-                <FiChevronLeft />
-              </button>
-              <span>Page {page} of {totalPages}</span>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40">
-                <FiChevronRight />
-              </button>
-              <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
-                className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-40">Last</button>
+        {report?.module === "Assets" && assetBreakdown.length > 0 && (
+          <div className="border-t border-gray-100 p-6 print:p-4">
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Asset Breakdown</h3>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-2">
+              {assetBreakdown.map((item) => (
+                <div key={item.productType} className="rounded-lg border border-gray-100 p-3 print:border-gray-200 break-inside-avoid">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {item.productType} - {item.total}
+                  </p>
+                  <div className="mt-1 pl-4 space-y-1">
+                    {item.products.map((product) => (
+                      <p key={`${item.productType}-${product.name}`} className="text-sm text-gray-700">
+                        {product.name} - {product.count}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -356,7 +399,7 @@ function PreviewContent() {
         @media print {
           @page {
             size: ${printOrientation};
-            margin: 12mm;
+            margin: 0;
           }
 
           html, body {
@@ -375,6 +418,7 @@ function PreviewContent() {
             width: 100%;
             max-width: none;
             margin: 0;
+            padding: 10mm;
             overflow: visible !important;
           }
           .report-table-wrap {
@@ -399,8 +443,13 @@ function PreviewContent() {
             break-inside: avoid;
             page-break-inside: avoid;
           }
+          .break-inside-avoid {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
           .print\\:hidden { display: none !important; }
           .hidden.print\\:block { display: block !important; }
+          .hidden.print\\:table-row-group { display: table-row-group !important; }
           .print\:whitespace-normal { white-space: normal !important; }
         }
       `}</style>
@@ -414,7 +463,7 @@ function getDefaultColumns(module: string): SelectedColumn[] {
       { key: "assetTag", label: "Asset Tag" },
       { key: "assignedTo.name", label: "User" },
       { key: "name", label: "Name" },
-      { key: "product.category.name", label: "Product Type" },
+      { key: "product.productType.name", label: "Product Type" },
     ];
   }
   return [{ key: "name", label: "Name" }];

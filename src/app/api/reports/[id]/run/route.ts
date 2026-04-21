@@ -291,6 +291,7 @@ function flattenAsset(
 ): Record<string, unknown> {
   const product = (a.product || {}) as Record<string, unknown>;
   const productCategory = (product.category || {}) as Record<string, unknown>;
+  const productType = (product.productType || {}) as Record<string, unknown>;
   const productVendor = (product.vendor || {}) as Record<string, unknown>;
   const vendor = (a.vendor || {}) as Record<string, unknown>;
   const department = (a.department || {}) as Record<string, unknown>;
@@ -303,6 +304,8 @@ function flattenAsset(
     .map((id) => associatedTagMap.get(id) || id)
     .join(", ");
   const createdBy = (a.createdBy || {}) as Record<string, unknown>;
+
+  const productTypeName = productType.name ?? productCategory.name ?? "";
 
   return {
     _id: a._id,
@@ -329,7 +332,9 @@ function flattenAsset(
     stateComments: a.stateComments ?? "",
     "product.name": product.name ?? "",
     "product.sku": product.sku ?? "",
-    "product.category.name": productCategory.name ?? "",
+    // Keep legacy key populated for already-saved reports that still reference it.
+    "product.category.name": productTypeName,
+    "product.productType.name": productTypeName,
     "product.vendor.name": productVendor.name ?? "",
     "vendor.name": vendor.name ?? "",
     "department.name": department.name ?? "",

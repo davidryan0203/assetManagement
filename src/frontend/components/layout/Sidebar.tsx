@@ -64,7 +64,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       className={`
         fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col h-full transform transition-transform duration-200 ease-out
         ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-        lg:sticky lg:top-0 lg:z-30 lg:w-64 lg:h-dvh lg:translate-x-0
+        lg:sticky lg:top-0 lg:z-30 lg:w-64 lg:h-screen lg:translate-x-0 lg:overflow-hidden
       `}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 lg:hidden">
@@ -107,7 +107,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-3 sm:p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-3 sm:p-4 space-y-1 overflow-y-auto min-h-0">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-3">
           Navigation
         </p>
