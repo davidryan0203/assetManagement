@@ -46,9 +46,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         />
       )}
       <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex-1 flex min-w-0 flex-col overflow-hidden min-h-screen">
+      <div className="flex-1 flex min-w-0 flex-col min-h-screen">
         <Navbar onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">{children}</main>
+        <main className="flex-1 p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );
