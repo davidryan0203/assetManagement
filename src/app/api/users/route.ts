@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         role: roleValue,
         phone: phone || "",
         mobile: mobile || "",
-        managerSiteIds: roleValue === "manager" ? normalizedManagerSiteIds : null,
+        managerSiteIds: roleValue === "manager" ? normalizedManagerSiteIds : undefined,
         department: department ? { connect: { id: department } } : undefined,
         site: roleValue === "manager"
           ? (primaryManagerSiteId ? { connect: { id: primaryManagerSiteId } } : undefined)
